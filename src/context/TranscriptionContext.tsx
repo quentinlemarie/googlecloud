@@ -17,7 +17,7 @@ export type TranscriptionAction =
   | { type: 'SET_PIPELINE'; stage: PipelineStage; status: PipelineStatus; progress: number; message: string }
   | { type: 'SET_PROGRESS'; progress: number; message: string }
   | { type: 'SET_ERROR'; message: string | null }
-  | { type: 'SET_RAW_DATA'; speakers: Speaker[]; transcript: TranscriptEntry[]; audioFileUrl?: string }
+  | { type: 'SET_RAW_DATA'; speakers: Speaker[]; transcript: TranscriptEntry[]; audioFileUrl?: string; audioBase64?: string; mimeType?: string }
   | { type: 'SET_EDITED_SPEAKERS'; speakers: Speaker[] }
   | { type: 'UPDATE_SPEAKER'; speaker: Speaker }
   | { type: 'SET_EDITED_TRANSCRIPT'; transcript: TranscriptEntry[] }
@@ -38,7 +38,7 @@ export type TranscriptionAction =
 // ─────────────────────────────────────────────────────────────────────────────
 // Initial state
 // ─────────────────────────────────────────────────────────────────────────────
-export const initialState: TranscriptionState = {
+const initialState: TranscriptionState = {
   pipeline: {
     stage: 'INIT',
     status: 'idle',
@@ -108,6 +108,8 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
           audioFileUrl: action.audioFileUrl ?? state.rawData.audioFileUrl,
           speakers: action.speakers,
           transcript: action.transcript,
+          audioBase64: action.audioBase64,
+          mimeType: action.mimeType,
         },
         edited: {
           speakers: action.speakers,
@@ -232,9 +234,10 @@ function loadFromStorage(): TranscriptionState {
 
 function saveToStorage(state: TranscriptionState): void {
   try {
-    // Don't persist transient UI state
-    const { ui: _ui, ...rest } = state;
-    localStorage.setItem(LS_STATE_KEY, JSON.stringify(rest));
+    // Don't persist transient UI state or large audio data
+    const { ui: _ui, rawData, ...rest } = state;
+    const { audioBase64: _audioBase64, mimeType: _mimeType, ...persistableRawData } = rawData;
+    localStorage.setItem(LS_STATE_KEY, JSON.stringify({ ...rest, rawData: persistableRawData }));
   } catch {
     // Storage may be full
   }
@@ -248,6 +251,7 @@ interface TranscriptionContextValue {
   dispatch: React.Dispatch<TranscriptionAction>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const TranscriptionContext = createContext<TranscriptionContextValue | null>(null);
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
+import { getSamplePlaybackDuration } from '../lib/audioProcessing';
+import type { Speaker } from '../types';
 
 /**
  * Modal for reassigning a transcript entry to a different speaker.
@@ -13,10 +15,67 @@ export const SpeakerModal = React.memo(function SpeakerModal() {
   const { state, dispatch } = useTranscription();
   const { speakerModalOpen, speakerModalEntryId } = state.ui;
   const { speakers, transcript } = state.edited;
+  const { audioBase64, mimeType } = state.rawData;
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // The speaker the user picked in step 1 (null = step 1 is active)
   const [pendingNewSpeakerId, setPendingNewSpeakerId] = useState<string | null>(null);
+
+  // Audio sample playback for the speaker list
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingSpeakerId, setPlayingSpeakerId] = useState<string | null>(null);
+
+  const handlePlaySample = useCallback(
+    (e: React.MouseEvent, speaker: Speaker) => {
+      e.stopPropagation();
+      if (!audioBase64 || !mimeType) return;
+
+      // Stop any currently playing sample
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+        if (playingSpeakerId === speaker.id) {
+          setPlayingSpeakerId(null);
+          return;
+        }
+      }
+
+      const duration = getSamplePlaybackDuration(speaker.id, transcript);
+      const src = `data:${mimeType};base64,${audioBase64}`;
+      const audio = new Audio(src);
+      audio.currentTime = speaker.timestamp;
+
+      const stopAt = speaker.timestamp + duration;
+      audio.ontimeupdate = () => {
+        if (audio.currentTime >= stopAt) {
+          audio.pause();
+          audioRef.current = null;
+          setPlayingSpeakerId(null);
+        }
+      };
+      audio.onended = () => {
+        audioRef.current = null;
+        setPlayingSpeakerId(null);
+      };
+
+      audioRef.current = audio;
+      setPlayingSpeakerId(speaker.id);
+      audio.play().catch(() => {
+        audioRef.current = null;
+        setPlayingSpeakerId(null);
+      });
+    },
+    [audioBase64, mimeType, playingSpeakerId, transcript]
+  );
+
+  // Stop playback when modal closes
+  useEffect(() => {
+    if (!speakerModalOpen && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlayingSpeakerId(null);
+    }
+  }, [speakerModalOpen]);
 
   // Derive the current speaker of the entry being edited
   const currentEntry = transcript.find((e) => e.id === speakerModalEntryId);
@@ -138,17 +197,27 @@ export const SpeakerModal = React.memo(function SpeakerModal() {
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Reassign Speaker</h3>
             <div className="space-y-2">
               {speakers.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleSelect(s.id)}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
-                >
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: s.color }}
-                  />
-                  <span className="text-sm font-medium text-gray-700">{s.name || s.label}</span>
-                </button>
+                <div key={s.id} className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleSelect(s.id)}
+                    className="flex-1 flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    <span className="text-sm font-medium text-gray-700">{s.name || s.label}</span>
+                  </button>
+                  {audioBase64 && (
+                    <button
+                      onClick={(e) => handlePlaySample(e, s)}
+                      title={playingSpeakerId === s.id ? 'Stop sample' : 'Play sample'}
+                      className="p-2 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors flex-shrink-0"
+                    >
+                      {playingSpeakerId === s.id ? '⏹' : '▶'}
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
             <button

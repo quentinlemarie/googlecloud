@@ -64,7 +64,7 @@ Analyze the provided audio and return ONLY a JSON object with the following stru
       "id": "speaker_1",
       "label": "Speaker 1",
       "name": "Full name if identifiable, otherwise empty string",
-      "role": "Job title if identifiable, otherwise empty string",
+      "role": "Job title or seniority level. Infer from explicit mentions, how speakers address each other, decision-making authority, topics discussed, and speech patterns (e.g. 'CEO', 'Senior Engineer', 'Director', 'Project Manager', 'Intern'). Use empty string only if truly uninferable.",
       "company": "Company name if mentioned, otherwise empty string",
       "timestamp": <seconds when this speaker first speaks as a number>
     }
@@ -81,7 +81,8 @@ Analyze the provided audio and return ONLY a JSON object with the following stru
 }
 
 Rules:
-- Use empty strings for unknown names, roles, and companies (NEVER use "Unknown", "N/A", etc.)
+- Use empty strings for unknown names and companies (NEVER use "Unknown", "N/A", etc.)
+- For role: infer seniority and title from context even when not explicitly stated — consider authority level, how others address the speaker, topics they lead, self-introductions, and decision-making patterns; use empty string only if no inference is possible
 - Keep speaker IDs consistent throughout the transcript
 - Timestamps must be accurate to the audio
 `.trim();

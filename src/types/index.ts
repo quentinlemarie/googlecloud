@@ -39,6 +39,10 @@ export interface RawData {
   audioFileUrl: string | null;
   transcript: TranscriptEntry[];
   speakers: Speaker[];
+  /** Base64-encoded audio – transient, not persisted to localStorage */
+  audioBase64?: string;
+  /** MIME type of the audio – transient, not persisted to localStorage */
+  mimeType?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
