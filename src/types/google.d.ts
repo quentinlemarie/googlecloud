@@ -67,7 +67,7 @@ export interface GoogleNamespace {
   picker: {
     PickerBuilder: new () => GooglePickerBuilder;
     DocsView: new (viewId?: string) => GooglePickerDocsView;
-    Action: { PICKED: string; CANCEL: string };
+    Action: { PICKED: string; CANCEL: string; ERROR: string };
     DocsViewMode: { LIST: string; GRID: string };
     ViewId: { DOCS: string };
     Feature: { SUPPORT_DRIVES: string };

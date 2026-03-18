@@ -129,7 +129,7 @@ export async function uploadRecordingBlob(
 export async function openDrivePicker(accessToken: string): Promise<{ id: string; name: string } | null> {
   await loadGooglePicker();
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const picker_ns = window.google!.picker!;
 
     const mediaView = new picker_ns.DocsView(picker_ns.ViewId.DOCS)
@@ -156,12 +156,11 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
       allFilesView.setParent('root');
     }
 
-    const picker = new picker_ns.PickerBuilder()
+    const pickerBuilder = new picker_ns.PickerBuilder()
       .addView(mediaView)
       .addView(allFilesView)
       .setOAuthToken(accessToken)
       .setAppId(GOOGLE_APP_ID)
-      .setDeveloperKey(API_KEY)
       .setOrigin(window.location.protocol + '//' + window.location.host)
       .enableFeature(picker_ns.Feature.SUPPORT_DRIVES)
       .setTitle('Select Meeting Media')
@@ -170,9 +169,16 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
           resolve({ id: data.docs[0].id, name: data.docs[0].name });
         } else if (data.action === picker_ns.Action.CANCEL) {
           resolve(null);
+        } else if (data.action === picker_ns.Action.ERROR) {
+          reject(new Error('Google Drive Picker encountered an error. Please try again or check your Drive configuration.'));
         }
-      })
-      .build();
+      });
+
+    if (API_KEY) {
+      pickerBuilder.setDeveloperKey(API_KEY);
+    }
+
+    const picker = pickerBuilder.build();
 
     picker.setVisible(true);
   });
