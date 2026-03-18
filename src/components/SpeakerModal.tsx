@@ -136,6 +136,21 @@ export const SpeakerModal = React.memo(function SpeakerModal() {
     if (!speakerModalOpen) setPendingNewSpeakerId(null);
   }, [speakerModalOpen]);
 
+  // Group speakers by company for step 1; named companies first, empty last
+  const speakersByCompany = useMemo(() => {
+    const groups = new Map<string, Speaker[]>();
+    for (const s of speakers) {
+      const key = s.company || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (!a && b) return 1;
+      if (a && !b) return -1;
+      return a.localeCompare(b);
+    });
+  }, [speakers]);
+
   if (!speakerModalOpen) return null;
 
   const pendingSpeaker = speakers.find((s) => s.id === pendingNewSpeakerId);
@@ -195,28 +210,39 @@ export const SpeakerModal = React.memo(function SpeakerModal() {
           /* ── Step 1: pick speaker ── */
           <>
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Reassign Speaker</h3>
-            <div className="space-y-2">
-              {speakers.map((s) => (
-                <div key={s.id} className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleSelect(s.id)}
-                    className="flex-1 flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
-                  >
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: s.color }}
-                    />
-                    <span className="text-sm font-medium text-gray-700">{s.name || s.label}</span>
-                  </button>
-                  {audioBase64 && (
-                    <button
-                      onClick={(e) => handlePlaySample(e, s)}
-                      title={playingSpeakerId === s.id ? 'Stop sample' : 'Play sample'}
-                      className="p-2 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors flex-shrink-0"
-                    >
-                      {playingSpeakerId === s.id ? '⏹' : '▶'}
-                    </button>
+            <div className="space-y-4">
+              {speakersByCompany.map(([company, companySpeakers]) => (
+                <div key={company || '__no_company__'}>
+                  {company && (
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">
+                      {company}
+                    </p>
                   )}
+                  <div className="space-y-1">
+                    {companySpeakers.map((s) => (
+                      <div key={s.id} className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleSelect(s.id)}
+                          className="flex-1 flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: s.color }}
+                          />
+                          <span className="text-sm font-medium text-gray-700">{s.name || s.label}</span>
+                        </button>
+                        {audioBase64 && (
+                          <button
+                            onClick={(e) => handlePlaySample(e, s)}
+                            title={playingSpeakerId === s.id ? 'Stop sample' : 'Play sample'}
+                            className="p-2 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors flex-shrink-0"
+                          >
+                            {playingSpeakerId === s.id ? '⏹' : '▶'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
