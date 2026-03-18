@@ -156,8 +156,6 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
       allFilesView.setParent('root');
     }
 
-    console.log({ token: accessToken ? '[set]' : undefined, API_KEY, GOOGLE_APP_ID });
-
     const picker = new picker_ns.PickerBuilder()
       .addView(mediaView)
       .addView(allFilesView)
