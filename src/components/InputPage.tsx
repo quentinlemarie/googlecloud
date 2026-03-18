@@ -71,6 +71,19 @@ export const InputPage = React.memo(function InputPage() {
     const result = await processFromDrive(onProgress, onError);
     if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
   }, [startLoading, onProgress, onError, finishLoading]);
+    try {
+      startLoading('Connecting to Google Drive…');
+      const result = await processFromDrive(onProgress, onError);
+      if (result) {
+        finishLoading(result.speakers, result.transcript);
+      } else {
+        // User cancelled the picker or auth – return to the start screen.
+        dispatch({ type: 'SET_STAGE', stage: 'INIT' });
+      }
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'An unexpected error occurred');
+    }
+  }, [startLoading, onProgress, onError, finishLoading, dispatch]);
 
   // ── Local Upload ──────────────────────────────────────────────────────────
   const handleFileChange = useCallback(
