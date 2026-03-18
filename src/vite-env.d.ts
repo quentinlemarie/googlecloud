@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __APP_BUILD_TIME__: number;
+
 interface ImportMetaEnv {
   readonly VITE_GOOGLE_CLIENT_ID: string;
   readonly VITE_GOOGLE_APP_ID: string;

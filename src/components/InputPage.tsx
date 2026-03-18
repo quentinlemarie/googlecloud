@@ -5,6 +5,7 @@ import { BRAND_RED } from '../lib/constants';
 import type { Speaker, TranscriptEntry } from '../types';
 import { requestAccessToken } from '../lib/auth';
 import { uploadRecordingBlob } from '../lib/storage';
+import { ConfirmDialog } from './ConfirmDialog';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pick the best audio encoding supported by this browser.
@@ -34,6 +35,14 @@ export const InputPage = React.memo(function InputPage() {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
+
+  const handleStopAndReset = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+    dispatch({ type: 'RESET' });
+    setConfirmTarget(null);
+  }, [dispatch]);
 
   const startLoading = useCallback(
     (message: string) => {
@@ -215,19 +224,57 @@ export const InputPage = React.memo(function InputPage() {
               </div>
             </button>
           ) : (
-            <button
-              onClick={handleMicStop}
-              className="w-full flex items-center gap-4 bg-red-50 border-2 border-red-400 rounded-xl p-5 shadow-sm animate-pulse"
-            >
-              <span className="text-3xl">⏹️</span>
-              <div className="text-left">
-                <div className="font-semibold text-red-600">Recording… click to stop</div>
-                <div className="text-sm text-red-400">Audio is being captured</div>
+            <>
+              <button
+                onClick={handleMicStop}
+                className="w-full flex items-center gap-4 bg-red-50 border-2 border-red-400 rounded-xl p-5 shadow-sm animate-pulse"
+              >
+                <span className="text-3xl">⏹️</span>
+                <div className="text-left">
+                  <div className="font-semibold text-red-600">Recording… click to stop</div>
+                  <div className="text-sm text-red-400">Audio is being captured</div>
+                </div>
+              </button>
+
+              {/* Cancel / Restart while recording */}
+              <div className="flex items-center justify-center gap-6 pt-2">
+                <button
+                  onClick={() => setConfirmTarget('cancel')}
+                  className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+                >
+                  Cancel recording
+                </button>
+                <button
+                  onClick={() => setConfirmTarget('restart')}
+                  className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+                >
+                  ↺ Restart from scratch
+                </button>
               </div>
-            </button>
+            </>
           )}
         </div>
       </div>
+
+      {confirmTarget === 'cancel' && (
+        <ConfirmDialog
+          message="Stop the current recording and go back to the selection menu?"
+          confirmLabel="Yes, cancel"
+          cancelLabel="Keep recording"
+          onConfirm={handleStopAndReset}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+
+      {confirmTarget === 'restart' && (
+        <ConfirmDialog
+          message="Stop the recording and restart from scratch? The current audio will be lost."
+          confirmLabel="Yes, restart"
+          cancelLabel="Keep recording"
+          onConfirm={handleStopAndReset}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
     </div>
   );
 });

@@ -83,3 +83,7 @@ export const TIMESTAMP_MISMATCH_THRESHOLD_S = 3; // > 3s mismatch = hallucinatio
 // Local storage keys
 // ─────────────────────────────────────────────────────────────────────────────
 export const LS_STATE_KEY = 'smart_transcription_state';
+
+// Build time stamp injected by Vite at build time. Changes on every new build
+// so that stale localStorage state from a previous deployment is discarded.
+export const APP_BUILD_TIME: number = __APP_BUILD_TIME__;
