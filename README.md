@@ -17,11 +17,25 @@ When setting up a Cloud Run service with continuous deployment, use the followin
 
 | Field | Value |
 |---|---|
-| **Branch** | `^main$` |
+| **Branch** | `^main$` *(see note below)* |
 | **Build type** | Dockerfile |
 | **Source location** | `/Dockerfile` |
 
-> **Source location** is the editable field you need to fill in. Enter `/Dockerfile` — this is the path (relative to the repository root) to the Dockerfile that Cloud Build will use.
+#### Which branch regex should I use?
+
+The Branch field accepts a regular expression matched against the full branch name.
+
+| You want to… | Enter |
+|---|---|
+| Deploy only when `main` is pushed (**recommended for production**) | `^main$` |
+| Deploy from every branch (useful for previews / staging) | `.*` |
+| Deploy from one specific feature branch, e.g. `copilot/refractor-app` | `^copilot/refractor-app$` |
+| Deploy from any `copilot/` branch | `^copilot/` |
+
+**For a production Cloud Run service, enter `^main$`.**  
+This means Cloud Build will trigger a new deployment only when commits are pushed to (or merged into) the `main` branch.
+
+> **Source location** is the other editable field you need to fill in. Enter `/Dockerfile` — this is the path (relative to the repository root) to the Dockerfile that Cloud Build will use.
 
 ### How it works
 
