@@ -1,23 +1,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Google API credentials
 // ─────────────────────────────────────────────────────────────────────────────
-// Uses the .env file if available, otherwise falls back to the hardcoded keys
-export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '371023911193-k424jji5aprp23hmhcbdhgvmoo0ngp70.apps.googleusercontent.com';
+// All sensitive values must be supplied via environment variables.
+// Copy .env.example to .env and fill in your credentials before running.
+export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 
 // REQUIRED for Google Drive Picker
-export const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '371023911193'; 
+export const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID ?? '';
 
-export const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || 'AIzaSyAwIAGFZY38GiivzVzNzFvdNhkg0jzXW9Q';
+export const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY ?? '';
 
-export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyDBzugE6IQkpSARbSY3uMQvQWESbG4zohk';
+export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
 
 // REQUIRED for GCP Error Reporting
-export const GCP_PROJECT_ID = import.meta.env.VITE_GCP_PROJECT_ID || 'named-trilogy-247110';
+export const GCP_PROJECT_ID = import.meta.env.VITE_GCP_PROJECT_ID ?? '';
 
 // Optional: Default folder for Drive Picker
-export const REC_FOLDER_ID = import.meta.env.VITE_REC_FOLDER_ID || 'Recordings';
+export const REC_FOLDER_ID = import.meta.env.VITE_REC_FOLDER_ID ?? 'Recordings';
 
-export const GCS_BUCKET = import.meta.env.VITE_GCS_BUCKET || 'mtp-storage';
+export const GCS_BUCKET = import.meta.env.VITE_GCS_BUCKET ?? 'mtp-storage';
 
 // Bucket and prefix used for raw microphone recordings
 export const RECORDINGS_BUCKET = 'mtp-storage';
