@@ -136,7 +136,9 @@ describe('validateAndCleanSpeakers', () => {
 describe('validateSummaryResponse', () => {
   it('returns confidence 1.0 for a valid summary response', () => {
     const raw = {
-      summary: 'A great meeting.',
+      executiveSummary: 'A great meeting.',
+      structuredSummary: '- Topic: something',
+      behaviouralSummary: '- Good dynamics',
       remarks: [{ speakerId: 'sp1', speakerName: 'Alice', remark: 'Good point.' }],
     };
     const result = validateSummaryResponse(raw);
@@ -146,17 +148,24 @@ describe('validateSummaryResponse', () => {
 
   it('sanitizes junk speaker names inside remarks', () => {
     const raw = {
-      summary: 'Meeting notes.',
+      executiveSummary: 'Meeting notes.',
+      structuredSummary: '- Topic',
+      behaviouralSummary: '- OK',
       remarks: [{ speakerId: 'sp1', speakerName: 'Unknown', remark: 'Something.' }],
     };
     const result = validateSummaryResponse(raw);
     expect(result.data.remarks[0]!.speakerName).toBe('');
   });
 
-  it('keeps the summary text unchanged', () => {
-    const raw = { summary: 'Key decisions made.', remarks: [] };
+  it('keeps the executive summary text unchanged', () => {
+    const raw = {
+      executiveSummary: 'Key decisions made.',
+      structuredSummary: '- Topic',
+      behaviouralSummary: '- OK',
+      remarks: [],
+    };
     const result = validateSummaryResponse(raw);
-    expect(result.data.summary).toBe('Key decisions made.');
+    expect(result.data.executiveSummary).toBe('Key decisions made.');
   });
 
   it('reduces confidence when schema does not match', () => {

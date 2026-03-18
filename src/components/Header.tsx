@@ -4,11 +4,7 @@ import { ExportMenu } from './ExportMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { BRAND_RED } from '../lib/constants';
 
-interface HeaderProps {
-  transcriptText: string;
-}
-
-export const Header = React.memo(function Header({ transcriptText }: HeaderProps) {
+export const Header = React.memo(function Header() {
   const { dispatch } = useTranscription();
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -29,7 +25,7 @@ export const Header = React.memo(function Header({ transcriptText }: HeaderProps
             >
               ↺ Restart
             </button>
-            <ExportMenu transcriptText={transcriptText} />
+            <ExportMenu />
           </div>
         </div>
       </header>

@@ -53,7 +53,13 @@ export const ReviewPage = React.memo(function ReviewPage({
     );
 
     if (result) {
-      dispatch({ type: 'SET_OUTPUTS', summary: result.summary, remarks: result.remarks });
+      dispatch({
+        type: 'SET_OUTPUTS',
+        executiveSummary: result.executiveSummary,
+        structuredSummary: result.structuredSummary,
+        behaviouralSummary: result.behaviouralSummary,
+        remarks: result.remarks,
+      });
       dispatch({
         type: 'SET_PIPELINE',
         stage: 'DONE',
