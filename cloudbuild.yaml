@@ -13,7 +13,7 @@ steps:
           --build-arg VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY \
           --build-arg VITE_GCS_BUCKET=$_VITE_GCS_BUCKET \
           --build-arg VITE_REC_FOLDER_ID=$_VITE_REC_FOLDER_ID \
-          -t $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/smart-transcription:$COMMIT_SHA \
+          -t $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA \
           .
     secretEnv:
       - VITE_GOOGLE_API_KEY
@@ -23,7 +23,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - push
-      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/smart-transcription:$COMMIT_SHA
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
 
   # Step 3: Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -31,13 +31,13 @@ steps:
       - gcloud
       - run
       - deploy
-      - smart-transcription
+      - $_SERVICE_NAME
       - --image
-      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/smart-transcription:$COMMIT_SHA
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
       - --region
       - $_DEPLOY_REGION
       - --platform
-      - managed
+      - $_PLATFORM
       - --quiet
 
 availableSecrets:

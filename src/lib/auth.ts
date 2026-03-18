@@ -101,8 +101,9 @@ export async function requestAccessToken(): Promise<string> {
     };
 
     try {
-      // Request token in popup mode (no redirect)
-      tokenClient.requestAccessToken({ prompt: '' });
+      // Show the account chooser so the user can pick (or confirm) the Google
+      // account they want to use, rather than silently reusing a cached session.
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch {
       // Popup blocked – surface a clear message
       reject(
