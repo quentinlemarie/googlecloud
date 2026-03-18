@@ -20,8 +20,30 @@ function loadGoogleIdentityServices(): Promise<void> {
     );
 
     if (existing) {
+      // The script tag already exists (injected via index.html).
+      // The 'load' event fires only once; if it already fired before we
+      // attached our listener the promise would hang forever.
+      // Poll briefly for the google object so we don't miss an already-loaded script.
+      let attempts = 0;
+      const MAX_ATTEMPTS = 100; // 5s at 50ms intervals
+      const poll = () => {
+        if (window.google?.accounts?.oauth2) {
+          resolve();
+          return;
+        }
+        attempts++;
+        if (attempts >= MAX_ATTEMPTS) {
+          reject(new Error('Google Identity Services failed to load. Check your connection and try again.'));
+          return;
+        }
+        setTimeout(poll, 50);
+      };
+
       existing.addEventListener('load', () => resolve(), { once: true });
       existing.addEventListener('error', () => reject(new Error('Failed to load Google Identity Services')), { once: true });
+
+      // Also start polling immediately in case the script already loaded
+      poll();
       return;
     }
 

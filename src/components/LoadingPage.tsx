@@ -3,8 +3,12 @@ import { useTranscription } from '../context/useTranscription';
 import { BRAND_RED } from '../lib/constants';
 
 export const LoadingPage = React.memo(function LoadingPage() {
-  const { state } = useTranscription();
+  const { state, dispatch } = useTranscription();
   const { progress, message } = state.pipeline;
+
+  const handleCancel = () => {
+    dispatch({ type: 'SET_STAGE', stage: 'INIT' });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
@@ -46,6 +50,14 @@ export const LoadingPage = React.memo(function LoadingPage() {
             />
           </svg>
         </div>
+
+        {/* Cancel button */}
+        <button
+          onClick={handleCancel}
+          className="mt-8 text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
