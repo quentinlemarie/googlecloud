@@ -7,8 +7,27 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source and build
+# Copy source
 COPY . .
+
+# Build-time secrets – pass these via --build-arg (or Cloud Build substitutions).
+# Vite reads VITE_* env vars at build time and bakes them into the JS bundle.
+ARG VITE_GOOGLE_CLIENT_ID
+ARG VITE_GOOGLE_APP_ID
+ARG VITE_GOOGLE_API_KEY
+ARG VITE_GEMINI_API_KEY
+ARG VITE_GCP_PROJECT_ID
+ARG VITE_GCS_BUCKET
+ARG VITE_REC_FOLDER_ID
+
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
+    VITE_GOOGLE_APP_ID=$VITE_GOOGLE_APP_ID \
+    VITE_GOOGLE_API_KEY=$VITE_GOOGLE_API_KEY \
+    VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY \
+    VITE_GCP_PROJECT_ID=$VITE_GCP_PROJECT_ID \
+    VITE_GCS_BUCKET=$VITE_GCS_BUCKET \
+    VITE_REC_FOLDER_ID=$VITE_REC_FOLDER_ID
+
 RUN npm run build
 
 # ── Stage 2: serve ────────────────────────────────────────────────────────────
