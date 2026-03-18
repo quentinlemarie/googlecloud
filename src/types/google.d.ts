@@ -15,11 +15,15 @@ export interface TokenResponse {
   access_token?: string;
   error?: string;
   error_description?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
 }
 
 export interface TokenClient {
   requestAccessToken: (options?: { prompt?: string }) => void;
-  callback: (response: TokenResponse) => void;
+  // GIS allows overriding the callback on the client instance dynamically
+  callback?: (response: TokenResponse) => void;
 }
 
 export interface GooglePickerBuilder {
@@ -55,7 +59,8 @@ export interface GoogleNamespace {
         scope: string;
         // CRITICAL FIX: ux_mode must be included so TypeScript allows the popup fix!
         ux_mode?: 'popup' | 'redirect'; 
-        callback: (response: TokenResponse) => void;
+        callback?: (response: TokenResponse) => void;
+        error_callback?: (error: unknown) => void;
       }) => TokenClient;
     };
   };
@@ -70,8 +75,16 @@ export interface GoogleNamespace {
 }
 
 export interface GapiNamespace {
-  load: (libs: string, callback: (() => void) | { callback: () => void; onerror: (err: unknown) => void }) => void;
+  load: (
+    libs: string, 
+    callback: (() => void) | { callback: () => void; onerror: (err: unknown) => void }
+  ) => void;
   client: {
-    init: (config: { apiKey: string; discoveryDocs: string[] }) => Promise<void>;
+    init: (config: { 
+      apiKey?: string; 
+      discoveryDocs?: string[]; 
+      clientId?: string; 
+      scope?: string;
+    }) => Promise<void>;
   };
 }
