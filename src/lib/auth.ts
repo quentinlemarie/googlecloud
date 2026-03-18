@@ -1,6 +1,39 @@
 import { CLIENT_ID, SCOPES } from './constants';
 import type { TokenResponse } from '../types/google.d.ts';
 
+const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
+
+/**
+ * Ensures the Google Identity Services script is loaded.
+ * If the script tag already exists in the DOM (added via index.html), it waits
+ * for it to finish loading. Otherwise it injects and loads it dynamically.
+ */
+function loadGoogleIdentityServices(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.oauth2) {
+      resolve();
+      return;
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${GIS_SCRIPT_URL}"]`
+    );
+
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load Google Identity Services')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = GIS_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+    document.head.appendChild(script);
+  });
+}
+
 /**
  * Promise-based wrapper around Google Identity Services token client.
  *
@@ -11,6 +44,8 @@ import type { TokenResponse } from '../types/google.d.ts';
  * @throws  Error with user-friendly message on failure or popup block.
  */
 export async function requestAccessToken(): Promise<string> {
+  await loadGoogleIdentityServices();
+
   return new Promise<string>((resolve, reject) => {
     if (!window.google?.accounts?.oauth2) {
       reject(new Error('Google Identity Services not loaded. Please refresh the page.'));
