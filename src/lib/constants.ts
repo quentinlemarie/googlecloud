@@ -19,6 +19,9 @@ export const GCP_PROJECT_ID = import.meta.env.VITE_GCP_PROJECT_ID || 'named-tril
 // Optional: Default folder for Drive Picker
 export const REC_FOLDER_ID = import.meta.env.VITE_REC_FOLDER_ID || 'Recordings';
 
+// Sentinel value used to detect unconfigured folder ID
+export const PLACEHOLDER_FOLDER_ID = 'YOUR_FOLDER_ID_HERE';
+
 export const GCS_BUCKET = import.meta.env.VITE_GCS_BUCKET || 'mtp-storage';
 
 // Bucket and prefix used for raw microphone recordings

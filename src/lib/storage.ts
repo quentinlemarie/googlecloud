@@ -1,4 +1,4 @@
-import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX, API_KEY, GOOGLE_APP_ID } from './constants';
+import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX, API_KEY, GOOGLE_APP_ID, REC_FOLDER_ID, PLACEHOLDER_FOLDER_ID } from './constants';
 import type { GooglePickerResponse } from '../types/google.d.ts';
 
 const GAPI_SCRIPT_URL = 'https://apis.google.com/js/api.js';
@@ -130,20 +130,32 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
   await loadGooglePicker();
 
   return new Promise((resolve) => {
-    const view = new window.google!.picker!.DocsView();
-    if (view.setMimeTypes) {
-      view.setMimeTypes('audio/*');
-    }
+    const picker_ns = window.google!.picker!;
 
-    const picker = new window.google!.picker!.PickerBuilder()
-      .addView(view)
+    const mediaView = new picker_ns.DocsView(picker_ns.ViewId.DOCS)
+      .setMimeTypes('audio/*,video/*')
+      .setMode(picker_ns.DocsViewMode.LIST)
+      .setLabel('Media (Audio/Video)');
+
+    const allFilesView = new picker_ns.DocsView(picker_ns.ViewId.DOCS)
+      .setIncludeFolders(true)
+      .setMode(picker_ns.DocsViewMode.LIST)
+      .setLabel('Full Drive Browsing')
+      .setParent(REC_FOLDER_ID && REC_FOLDER_ID !== PLACEHOLDER_FOLDER_ID ? REC_FOLDER_ID : 'root');
+
+    const picker = new picker_ns.PickerBuilder()
+      .addView(mediaView)
+      .addView(allFilesView)
       .setOAuthToken(accessToken)
       .setAppId(GOOGLE_APP_ID)
       .setDeveloperKey(API_KEY)
+      .setOrigin(window.location.protocol + '//' + window.location.host)
+      .enableFeature(picker_ns.Feature.SUPPORT_DRIVES)
+      .setTitle('Select Meeting Media')
       .setCallback((data: GooglePickerResponse) => {
-        if (data.action === window.google!.picker!.Action.PICKED && data.docs?.[0]) {
+        if (data.action === picker_ns.Action.PICKED && data.docs?.[0]) {
           resolve({ id: data.docs[0].id, name: data.docs[0].name });
-        } else {
+        } else if (data.action === picker_ns.Action.CANCEL) {
           resolve(null);
         }
       })
