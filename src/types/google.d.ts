@@ -23,6 +23,8 @@ export interface TokenClient {
 export interface GooglePickerBuilder {
   addView: (view: GooglePickerDocsView) => GooglePickerBuilder;
   setOAuthToken: (token: string) => GooglePickerBuilder;
+  setAppId: (appId: string) => GooglePickerBuilder;
+  setDeveloperKey: (key: string) => GooglePickerBuilder;
   setCallback: (fn: (data: GooglePickerResponse) => void) => GooglePickerBuilder;
   build: () => { setVisible: (v: boolean) => void };
 }
@@ -54,7 +56,7 @@ export interface GoogleNamespace {
 }
 
 export interface GapiNamespace {
-  load: (libs: string, callback: () => void) => void;
+  load: (libs: string, callback: (() => void) | { callback: () => void; onerror: (err: unknown) => void }) => void;
   client?: {
     init: (config: { apiKey: string; discoveryDocs: string[] }) => Promise<void>;
   };

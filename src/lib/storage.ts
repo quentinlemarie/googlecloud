@@ -1,5 +1,50 @@
-import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX } from './constants';
+import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX, API_KEY, GOOGLE_APP_ID } from './constants';
 import type { GooglePickerResponse } from '../types/google.d.ts';
+
+const GAPI_SCRIPT_URL = 'https://apis.google.com/js/api.js';
+
+/**
+ * Ensures the Google API client library and the Picker module are loaded.
+ * The script tag may already be present (added via index.html); if so it waits
+ * for it to finish. Otherwise the script is injected dynamically.
+ */
+function loadGooglePicker(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.google?.picker) {
+      resolve();
+      return;
+    }
+
+    const initPicker = () => {
+      window.gapi!.load('picker', {
+        callback: () => resolve(),
+        onerror: () => reject(new Error('Failed to load Google Picker module')),
+      });
+    };
+
+    if (window.gapi) {
+      initPicker();
+      return;
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${GAPI_SCRIPT_URL}"]`
+    );
+
+    if (existing) {
+      existing.addEventListener('load', initPicker, { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load Google API library')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = GAPI_SCRIPT_URL;
+    script.async = true;
+    script.onload = initPicker;
+    script.onerror = () => reject(new Error('Failed to load Google API library'));
+    document.head.appendChild(script);
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cloud Storage
@@ -82,20 +127,19 @@ export async function uploadRecordingBlob(
  * or null if the user cancels.
  */
 export async function openDrivePicker(accessToken: string): Promise<{ id: string; name: string } | null> {
-  return new Promise((resolve) => {
-    if (!window.google?.picker) {
-      resolve(null);
-      return;
-    }
+  await loadGooglePicker();
 
-    const view = new window.google.picker.DocsView();
+  return new Promise((resolve) => {
+    const view = new window.google!.picker!.DocsView();
     if (view.setMimeTypes) {
       view.setMimeTypes('audio/*');
     }
 
-    const picker = new window.google.picker.PickerBuilder()
+    const picker = new window.google!.picker!.PickerBuilder()
       .addView(view)
       .setOAuthToken(accessToken)
+      .setAppId(GOOGLE_APP_ID)
+      .setDeveloperKey(API_KEY)
       .setCallback((data: GooglePickerResponse) => {
         if (data.action === window.google!.picker!.Action.PICKED && data.docs?.[0]) {
           resolve({ id: data.docs[0].id, name: data.docs[0].name });
