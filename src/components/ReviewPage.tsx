@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { SpeakerEditor } from './SpeakerEditor';
 import { generateOutputs } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
 import { ConfirmDialog } from './ConfirmDialog';
+import type { Speaker } from '../types';
 
 interface ReviewPageProps {
   audioBase64?: string;
@@ -17,6 +18,21 @@ export const ReviewPage = React.memo(function ReviewPage({
   const { state, dispatch } = useTranscription();
   const speakers = state.edited.speakers;
   const [confirmTarget, setConfirmTarget] = useState<'restart' | null>(null);
+
+  // Group speakers by company; named companies first, empty last (alphabetically sorted)
+  const speakersByCompany = useMemo(() => {
+    const groups = new Map<string, Speaker[]>();
+    for (const speaker of speakers) {
+      const key = speaker.company || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(speaker);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (!a && b) return 1;
+      if (a && !b) return -1;
+      return a.localeCompare(b);
+    });
+  }, [speakers]);
 
   const handleConfirm = useCallback(async () => {
     dispatch({
@@ -63,14 +79,25 @@ export const ReviewPage = React.memo(function ReviewPage({
         {speakers.length === 0 ? (
           <p className="text-center text-gray-400">No speakers detected.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-            {speakers.map((speaker) => (
-              <SpeakerEditor
-                key={speaker.id}
-                speaker={speaker}
-                audioBase64={audioBase64}
-                mimeType={mimeType}
-              />
+          <div className="mb-8">
+            {speakersByCompany.map(([company, companySpeakers]) => (
+              <div key={company || '__no_company__'} className="mb-6">
+                {company && (
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    {company}
+                  </h3>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {companySpeakers.map((speaker) => (
+                    <SpeakerEditor
+                      key={speaker.id}
+                      speaker={speaker}
+                      audioBase64={audioBase64}
+                      mimeType={mimeType}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
