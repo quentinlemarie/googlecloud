@@ -1,4 +1,4 @@
-import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX, API_KEY, GOOGLE_APP_ID } from './constants';
+import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX, API_KEY, GOOGLE_APP_ID, REC_FOLDER_ID, PLACEHOLDER_FOLDER_ID } from './constants';
 import type { GooglePickerResponse } from '../types/google.d.ts';
 
 const GAPI_SCRIPT_URL = 'https://apis.google.com/js/api.js';
@@ -133,14 +133,22 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
     const picker_ns = window.google!.picker!;
 
     const mediaView = new picker_ns.DocsView(picker_ns.ViewId.DOCS)
-      .setMimeTypes('audio/*,video/*')
+      // Include specific audio subtypes alongside wildcards to ensure Google
+      // Picker filters them reliably (wildcard-only can miss some formats).
+      .setMimeTypes('audio/*,video/*,audio/mp4,audio/x-m4a,audio/m4a,audio/mpeg,audio/wav')
       .setMode(picker_ns.DocsViewMode.LIST)
       .setLabel('Media (Audio/Video)');
 
-    const allFilesView = new picker_ns.DocsView()
+    const allFilesView = new picker_ns.DocsView(picker_ns.ViewId.DOCS)
       .setIncludeFolders(true)
       .setMode(picker_ns.DocsViewMode.LIST)
       .setLabel('Full Drive Browsing');
+
+    if (REC_FOLDER_ID && REC_FOLDER_ID !== PLACEHOLDER_FOLDER_ID) {
+      allFilesView.setParent(REC_FOLDER_ID);
+    } else {
+      allFilesView.setParent('root');
+    }
 
     console.log({ token: accessToken ? '[set]' : undefined, API_KEY, GOOGLE_APP_ID });
 
