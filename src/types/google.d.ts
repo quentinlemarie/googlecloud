@@ -26,11 +26,18 @@ export interface GooglePickerBuilder {
   setAppId: (appId: string) => GooglePickerBuilder;
   setDeveloperKey: (key: string) => GooglePickerBuilder;
   setCallback: (fn: (data: GooglePickerResponse) => void) => GooglePickerBuilder;
+  setOrigin: (origin: string) => GooglePickerBuilder;
+  setTitle: (title: string) => GooglePickerBuilder;
+  enableFeature: (feature: string) => GooglePickerBuilder;
   build: () => { setVisible: (v: boolean) => void };
 }
 
 export interface GooglePickerDocsView {
-  setMimeTypes?: (types: string) => GooglePickerDocsView;
+  setMimeTypes: (types: string) => GooglePickerDocsView;
+  setMode: (mode: string) => GooglePickerDocsView;
+  setIncludeFolders: (include: boolean) => GooglePickerDocsView;
+  setLabel: (label: string) => GooglePickerDocsView;
+  setParent: (folderId: string) => GooglePickerDocsView;
 }
 
 export interface GooglePickerResponse {
@@ -50,8 +57,11 @@ export interface GoogleNamespace {
   };
   picker?: {
     PickerBuilder: new () => GooglePickerBuilder;
-    DocsView: new () => GooglePickerDocsView;
-    Action: { PICKED: string };
+    DocsView: new (viewId?: string) => GooglePickerDocsView;
+    Action: { PICKED: string; CANCEL: string };
+    DocsViewMode: { LIST: string; GRID: string };
+    ViewId: { DOCS: string };
+    Feature: { SUPPORT_DRIVES: string };
   };
 }
 
