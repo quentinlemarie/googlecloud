@@ -215,12 +215,12 @@ export async function downloadDriveFile(
 
   const arrayBuffer = await fileResponse.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
+  const chunks: string[] = [];
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
   }
-  const base64 = btoa(binary);
+  const base64 = btoa(chunks.join(''));
 
   return { data: base64, mimeType: meta.mimeType };
 }
