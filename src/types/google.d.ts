@@ -1,8 +1,10 @@
 // Shared global type augmentations for Google APIs loaded via script tags
 declare global {
   interface Window {
-    google?: GoogleNamespace;
-    gapi?: GapiNamespace;
+    // Removed the '?' so TypeScript allows us to construct classes directly
+    // (e.g. new window.google.picker.PickerBuilder())
+    google: GoogleNamespace;
+    gapi: GapiNamespace;
   }
 }
 
@@ -46,16 +48,18 @@ export interface GooglePickerResponse {
 }
 
 export interface GoogleNamespace {
-  accounts?: {
+  accounts: {
     oauth2: {
       initTokenClient: (config: {
         client_id: string;
         scope: string;
+        // CRITICAL FIX: ux_mode must be included so TypeScript allows the popup fix!
+        ux_mode?: 'popup' | 'redirect'; 
         callback: (response: TokenResponse) => void;
       }) => TokenClient;
     };
   };
-  picker?: {
+  picker: {
     PickerBuilder: new () => GooglePickerBuilder;
     DocsView: new (viewId?: string) => GooglePickerDocsView;
     Action: { PICKED: string; CANCEL: string };
@@ -67,7 +71,7 @@ export interface GoogleNamespace {
 
 export interface GapiNamespace {
   load: (libs: string, callback: (() => void) | { callback: () => void; onerror: (err: unknown) => void }) => void;
-  client?: {
+  client: {
     init: (config: { apiKey: string; discoveryDocs: string[] }) => Promise<void>;
   };
 }
