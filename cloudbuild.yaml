@@ -1,0 +1,49 @@
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - --build-arg
+      - VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID
+      - --build-arg
+      - VITE_GOOGLE_APP_ID=$_VITE_GOOGLE_APP_ID
+      - --build-arg
+      - VITE_GCP_PROJECT_ID=$_VITE_GCP_PROJECT_ID
+      - --build-arg
+      - VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY
+      - --build-arg
+      - VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY
+      - -t
+      - $_AR_HOSTNAME/$PROJECT_ID/$_REPOSITORY/smart-transcription:$COMMIT_SHA
+      - .
+    secretEnv:
+      - VITE_GOOGLE_API_KEY
+      - VITE_GEMINI_API_KEY
+
+  # Step 2: Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - $_AR_HOSTNAME/$PROJECT_ID/$_REPOSITORY/smart-transcription:$COMMIT_SHA
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - gcloud
+      - run
+      - deploy
+      - smart-transcription
+      - --image
+      - $_AR_HOSTNAME/$PROJECT_ID/$_REPOSITORY/smart-transcription:$COMMIT_SHA
+      - --region
+      - $_SERVICE_REGION
+      - --platform
+      - managed
+      - --quiet
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/VITE_GOOGLE_API_KEY/versions/latest
+      env: VITE_GOOGLE_API_KEY
+    - versionName: projects/$PROJECT_ID/secrets/VITE_GEMINI_API_KEY/versions/latest
+      env: VITE_GEMINI_API_KEY
