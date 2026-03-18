@@ -1,21 +1,18 @@
 steps:
   # Step 1: Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - build
-      - --build-arg
-      - VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID
-      - --build-arg
-      - VITE_GOOGLE_APP_ID=$_VITE_GOOGLE_APP_ID
-      - --build-arg
-      - VITE_GCP_PROJECT_ID=$_VITE_GCP_PROJECT_ID
-      - --build-arg
-      - VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY
-      - --build-arg
-      - VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY
-      - -t
-      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/smart-transcription:$COMMIT_SHA    
-      - .
+      - '-c'
+      - |
+        docker build \
+          --build-arg VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID \
+          --build-arg VITE_GOOGLE_APP_ID=$_VITE_GOOGLE_APP_ID \
+          --build-arg VITE_GCP_PROJECT_ID=$_VITE_GCP_PROJECT_ID \
+          --build-arg VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY \
+          --build-arg VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY \
+          -t $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/smart-transcription:$COMMIT_SHA \
+          .
     secretEnv:
       - VITE_GOOGLE_API_KEY
       - VITE_GEMINI_API_KEY
