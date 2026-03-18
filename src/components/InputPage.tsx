@@ -58,8 +58,8 @@ export const InputPage = React.memo(function InputPage() {
   );
 
   const finishLoading = useCallback(
-    (speakers: Speaker[], transcript: TranscriptEntry[]) => {
-      dispatch({ type: 'SET_RAW_DATA', speakers, transcript });
+    (speakers: Speaker[], transcript: TranscriptEntry[], audioBase64?: string, mimeType?: string) => {
+      dispatch({ type: 'SET_RAW_DATA', speakers, transcript, audioBase64, mimeType });
       dispatch({ type: 'SET_PIPELINE', stage: 'REVIEW', status: 'idle', progress: 100, message: '' });
     },
     [dispatch]
@@ -69,7 +69,7 @@ export const InputPage = React.memo(function InputPage() {
   const handleDrive = useCallback(async () => {
     startLoading('Connecting to Google Drive…');
     const result = await processFromDrive(onProgress, onError);
-    if (result) finishLoading(result.speakers, result.transcript);
+    if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
   }, [startLoading, onProgress, onError, finishLoading]);
 
   // ── Local Upload ──────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ export const InputPage = React.memo(function InputPage() {
       }
 
       const result = await processAudioFile(file, onProgress, onError);
-      if (result) finishLoading(result.speakers, result.transcript);
+      if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
     },
     [startLoading, onProgress, onError, finishLoading]
   );
@@ -134,7 +134,7 @@ export const InputPage = React.memo(function InputPage() {
 
         const file = new File([blob], filename, { type: effectiveMime });
         const result = await processAudioFile(file, onProgress, onError);
-        if (result) finishLoading(result.speakers, result.transcript);
+        if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
       };
 
       recorder.start();

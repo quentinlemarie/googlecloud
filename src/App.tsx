@@ -31,7 +31,12 @@ function AppInner() {
       {/* Stage routing */}
       {stage === 'INIT' && <InputPage />}
       {stage === 'LOADING' && <LoadingPage />}
-      {stage === 'REVIEW' && <ReviewPage />}
+      {stage === 'REVIEW' && (
+        <ReviewPage
+          audioBase64={state.rawData.audioBase64}
+          mimeType={state.rawData.mimeType}
+        />
+      )}
       {stage === 'SUMMARIZING' && <LoadingPage />}
       {stage === 'DONE' && <OutputPage />}
     </div>
