@@ -7,7 +7,7 @@ import type {
   TranscriptEntry,
   SpeakerRemark,
 } from '../types';
-import { LS_STATE_KEY } from '../lib/constants';
+import { LS_STATE_KEY, APP_BUILD_TIME } from '../lib/constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Action types
@@ -218,7 +218,12 @@ function loadFromStorage(): TranscriptionState {
   try {
     const raw = localStorage.getItem(LS_STATE_KEY);
     if (!raw) return initialState;
-    const parsed = JSON.parse(raw) as Partial<TranscriptionState>;
+    const parsed = JSON.parse(raw) as Partial<TranscriptionState> & { buildTime?: number };
+    // If the stored build time doesn't match the current build, discard the
+    // cached state so users always start fresh after a new deployment.
+    if (parsed.buildTime !== APP_BUILD_TIME) {
+      return initialState;
+    }
     const state = { ...initialState, ...parsed };
     // Transient processing stages cannot be resumed after a page reload.
     // Reset them to INIT so the user is never permanently stuck on the
@@ -237,7 +242,10 @@ function saveToStorage(state: TranscriptionState): void {
     // Don't persist transient UI state or large audio data
     const { ui: _ui, rawData, ...rest } = state;
     const { audioBase64: _audioBase64, mimeType: _mimeType, ...persistableRawData } = rawData;
-    localStorage.setItem(LS_STATE_KEY, JSON.stringify({ ...rest, rawData: persistableRawData }));
+    localStorage.setItem(
+      LS_STATE_KEY,
+      JSON.stringify({ ...rest, rawData: persistableRawData, buildTime: APP_BUILD_TIME })
+    );
   } catch {
     // Storage may be full
   }

@@ -1,8 +1,9 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { SpeakerEditor } from './SpeakerEditor';
 import { generateOutputs } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface ReviewPageProps {
   audioBase64?: string;
@@ -15,6 +16,7 @@ export const ReviewPage = React.memo(function ReviewPage({
 }: ReviewPageProps) {
   const { state, dispatch } = useTranscription();
   const speakers = state.edited.speakers;
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleConfirm = useCallback(async () => {
     dispatch({
@@ -73,7 +75,7 @@ export const ReviewPage = React.memo(function ReviewPage({
           </div>
         )}
 
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-3">
           <button
             onClick={handleConfirm}
             className="px-8 py-3 rounded-xl font-semibold text-white shadow-md hover:opacity-90 transition-opacity"
@@ -81,8 +83,24 @@ export const ReviewPage = React.memo(function ReviewPage({
           >
             Confirm & Generate Summary
           </button>
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+          >
+            Cancel &amp; start over
+          </button>
         </div>
       </div>
+
+      {showConfirm && (
+        <ConfirmDialog
+          message="Discard the current transcription and go back to the selection menu?"
+          confirmLabel="Yes, start over"
+          cancelLabel="Keep reviewing"
+          onConfirm={() => dispatch({ type: 'RESET' })}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 });

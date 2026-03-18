@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { BRAND_RED } from '../lib/constants';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export const LoadingPage = React.memo(function LoadingPage() {
   const { state, dispatch } = useTranscription();
   const { progress, message } = state.pipeline;
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const handleCancel = () => {
-    dispatch({ type: 'SET_STAGE', stage: 'INIT' });
+  const handleCancel = () => setShowConfirm(true);
+  const handleConfirmCancel = () => {
+    setShowConfirm(false);
+    dispatch({ type: 'RESET' });
   };
 
   return (
@@ -59,6 +63,16 @@ export const LoadingPage = React.memo(function LoadingPage() {
           Cancel
         </button>
       </div>
+
+      {showConfirm && (
+        <ConfirmDialog
+          message="Cancel the current processing and start over?"
+          confirmLabel="Yes, cancel"
+          cancelLabel="Keep waiting"
+          onConfirm={handleConfirmCancel}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 });
