@@ -41,9 +41,12 @@ steps:
       - managed
       - --quiet
 
-availableSecrets:
+aavailableSecrets:
   secretManager:
     - versionName: projects/$PROJECT_ID/secrets/VITE_GOOGLE_API_KEY/versions/latest
       env: VITE_GOOGLE_API_KEY
     - versionName: projects/$PROJECT_ID/secrets/VITE_GEMINI_API_KEY/versions/latest
       env: VITE_GEMINI_API_KEY
+      
+options:
+  logging: CLOUD_LOGGING_ONLY
