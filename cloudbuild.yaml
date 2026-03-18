@@ -1,0 +1,58 @@
+steps:
+  # Step 1: Build the Docker image with VITE build-time variables baked in
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker build \
+          --build-arg VITE_GOOGLE_CLIENT_ID="$$VITE_GOOGLE_CLIENT_ID" \
+          --build-arg VITE_GOOGLE_APP_ID="$$VITE_GOOGLE_APP_ID" \
+          --build-arg VITE_GCP_PROJECT_ID="$$VITE_GCP_PROJECT_ID" \
+          --build-arg VITE_GCS_BUCKET="$$VITE_GCS_BUCKET" \
+          --build-arg VITE_REC_FOLDER_ID="$$VITE_REC_FOLDER_ID" \
+          --build-arg VITE_GOOGLE_API_KEY="$$VITE_GOOGLE_API_KEY" \
+          --build-arg VITE_GEMINI_API_KEY="$$VITE_GEMINI_API_KEY" \
+          -t $_IMAGE .
+    env:
+      - 'VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID'
+      - 'VITE_GOOGLE_APP_ID=$_VITE_GOOGLE_APP_ID'
+      - 'VITE_GCP_PROJECT_ID=$_VITE_GCP_PROJECT_ID'
+      - 'VITE_GCS_BUCKET=$_VITE_GCS_BUCKET'
+      - 'VITE_REC_FOLDER_ID=$_VITE_REC_FOLDER_ID'
+    secretEnv:
+      - VITE_GOOGLE_API_KEY
+      - VITE_GEMINI_API_KEY
+
+  # Step 2: Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '$_IMAGE']
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'smart-transcription'
+      - '--image=$_IMAGE'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--quiet'
+
+substitutions:
+  _REGION: us-central1
+  _IMAGE: us-central1-docker.pkg.dev/$PROJECT_ID/smart-transcription/smart-transcription:$COMMIT_SHA
+  # Override these in your Cloud Build trigger configuration:
+  _VITE_GOOGLE_CLIENT_ID: ''
+  _VITE_GOOGLE_APP_ID: ''
+  _VITE_GCP_PROJECT_ID: ''
+  _VITE_GCS_BUCKET: ''
+  _VITE_REC_FOLDER_ID: ''
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/VITE_GOOGLE_API_KEY/versions/latest
+      env: VITE_GOOGLE_API_KEY
+    - versionName: projects/$PROJECT_ID/secrets/VITE_GEMINI_API_KEY/versions/latest
+      env: VITE_GEMINI_API_KEY

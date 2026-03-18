@@ -9,6 +9,24 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
+
+# Declare build-time variables so Vite can bake them into the React SPA
+ARG VITE_GOOGLE_CLIENT_ID
+ARG VITE_GOOGLE_APP_ID
+ARG VITE_GCP_PROJECT_ID
+ARG VITE_GCS_BUCKET
+ARG VITE_REC_FOLDER_ID
+ARG VITE_GOOGLE_API_KEY
+ARG VITE_GEMINI_API_KEY
+
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_APP_ID=$VITE_GOOGLE_APP_ID
+ENV VITE_GCP_PROJECT_ID=$VITE_GCP_PROJECT_ID
+ENV VITE_GCS_BUCKET=$VITE_GCS_BUCKET
+ENV VITE_REC_FOLDER_ID=$VITE_REC_FOLDER_ID
+ENV VITE_GOOGLE_API_KEY=$VITE_GOOGLE_API_KEY
+ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+
 RUN npm run build
 
 # ── Stage 2: serve ────────────────────────────────────────────────────────────
