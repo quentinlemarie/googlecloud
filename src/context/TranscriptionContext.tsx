@@ -32,6 +32,7 @@ export type TranscriptionAction =
   | { type: 'SET_EXPORT_MENU_OPEN'; open: boolean }
   | { type: 'SET_TRANSCRIPT_EDIT_MODE'; enabled: boolean }
   | { type: 'REASSIGN_SPEAKER'; entryId: string; newSpeakerId: string }
+  | { type: 'REASSIGN_SPEAKER_ALL'; oldSpeakerId: string; newSpeakerId: string }
   | { type: 'RESET' };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,6 +182,17 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
     case 'REASSIGN_SPEAKER': {
       const updatedTranscript = state.edited.transcript.map((e) =>
         e.id === action.entryId ? { ...e, speakerId: action.newSpeakerId } : e
+      );
+      return {
+        ...state,
+        edited: { ...state.edited, transcript: updatedTranscript },
+        ui: { ...state.ui, speakerModalOpen: false, speakerModalEntryId: null },
+      };
+    }
+
+    case 'REASSIGN_SPEAKER_ALL': {
+      const updatedTranscript = state.edited.transcript.map((e) =>
+        e.speakerId === action.oldSpeakerId ? { ...e, speakerId: action.newSpeakerId } : e
       );
       return {
         ...state,
