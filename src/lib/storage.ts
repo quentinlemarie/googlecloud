@@ -1,4 +1,4 @@
-import { GCS_BUCKET } from './constants';
+import { GCS_BUCKET, RECORDINGS_BUCKET, RECORDINGS_PREFIX } from './constants';
 import type { GooglePickerResponse } from '../types/google.d.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -32,6 +32,45 @@ export async function uploadToCloudStorage(
   }
 
   return `https://storage.googleapis.com/${GCS_BUCKET}/${encodeURIComponent(filename)}`;
+}
+
+/**
+ * Uploads a raw audio Blob (e.g. a microphone recording) directly to
+ * `mtp-storage/Recordings/<filename>` and returns the GCS object URL.
+ *
+ * The upload uses the GCS JSON API `uploadType=media` (single-request upload),
+ * which is appropriate for files up to ~5 MB. For longer recordings the
+ * browser's MediaRecorder typically produces larger files – those are handled
+ * fine as well because the browser streams the request body.
+ */
+export async function uploadRecordingBlob(
+  blob: Blob,
+  filename: string,
+  accessToken: string,
+): Promise<string> {
+  const objectName = `${RECORDINGS_PREFIX}${filename}`;
+  const uploadUrl =
+    `https://storage.googleapis.com/upload/storage/v1/b/${RECORDINGS_BUCKET}/o` +
+    `?uploadType=media&name=${encodeURIComponent(objectName)}`;
+
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': blob.type,
+    },
+    body: blob,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Recording upload failed (${response.status}): ${text}`);
+  }
+
+  return (
+    `https://storage.googleapis.com/${RECORDINGS_BUCKET}/` +
+    encodeURIComponent(objectName)
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

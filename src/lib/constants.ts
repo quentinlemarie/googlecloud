@@ -13,6 +13,10 @@ export const GEMINI_API_KEY =
 export const GCS_BUCKET =
   import.meta.env.VITE_GCS_BUCKET ?? 'smart-transcription-outputs';
 
+// Bucket and prefix used for raw microphone recordings
+export const RECORDINGS_BUCKET = 'mtp-storage';
+export const RECORDINGS_PREFIX = 'Recordings/';
+
 export const GCP_PROJECT_ID =
   import.meta.env.VITE_GCP_PROJECT_ID ?? '';
 

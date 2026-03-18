@@ -3,6 +3,30 @@ import { useTranscription } from '../context/useTranscription';
 import { processAudioFile, processFromDrive } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
 import type { Speaker, TranscriptEntry } from '../types';
+import { requestAccessToken } from '../lib/auth';
+import { uploadRecordingBlob } from '../lib/storage';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pick the best audio encoding supported by this browser.
+// Preference order:
+//   1. audio/mp4 (AAC-LC) → saves as .m4a  – Chrome, Safari, Edge
+//   2. audio/mpeg          → saves as .mp3  – rarely supported natively
+//   3. audio/webm;codecs=opus → .webm     – Firefox, Chrome fallback
+//   4. audio/webm                          – last resort
+// ─────────────────────────────────────────────────────────────────────────────
+function chooseMimeType(): { mimeType: string; ext: string } {
+  const candidates: Array<{ mimeType: string; ext: string }> = [
+    { mimeType: 'audio/mp4;codecs=mp4a.40.2', ext: 'm4a' },
+    { mimeType: 'audio/mp4',                  ext: 'm4a' },
+    { mimeType: 'audio/mpeg',                 ext: 'mp3' },
+    { mimeType: 'audio/webm;codecs=opus',     ext: 'webm' },
+    { mimeType: 'audio/webm',                 ext: 'webm' },
+  ];
+  return (
+    candidates.find((c) => MediaRecorder.isTypeSupported(c.mimeType)) ??
+    { mimeType: '', ext: 'webm' }
+  );
+}
 
 export const InputPage = React.memo(function InputPage() {
   const { dispatch } = useTranscription();
@@ -65,15 +89,42 @@ export const InputPage = React.memo(function InputPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
+
+      const { mimeType, ext } = chooseMimeType();
+      const recorderOptions = mimeType ? { mimeType } : {};
+      const recorder = new MediaRecorder(stream, recorderOptions);
+      const effectiveMime = recorder.mimeType || 'audio/webm';
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const file = new File([blob], 'recording.webm', { type: 'audio/webm' });
-        startLoading('Processing recording…');
+        // Release microphone immediately
+        stream.getTracks().forEach((t) => t.stop());
+
+        const blob = new Blob(chunksRef.current, { type: effectiveMime });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `recording-${timestamp}.${ext}`;
+
+        startLoading('Uploading recording…');
+        onProgress(5, `Saving recording to Cloud Storage (mtp-storage/Recordings/)…`);
+
+        // Upload raw recording to mtp-storage/Recordings/ – non-fatal if it fails
+        try {
+          const accessToken = await requestAccessToken();
+          await uploadRecordingBlob(blob, filename, accessToken);
+          onProgress(25, 'Recording saved. Transcribing…');
+        } catch (uploadErr) {
+          console.warn('Recording GCS upload failed (continuing with transcription):', uploadErr);
+          onProgress(25, 'Transcribing…');
+        }
+
+        const file = new File([blob], filename, { type: effectiveMime });
         const result = await processAudioFile(file, onProgress, onError);
         if (result) finishLoading(result.speakers, result.transcript);
       };
+
       recorder.start();
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
