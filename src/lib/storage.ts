@@ -213,14 +213,21 @@ export async function downloadDriveFile(
     throw new Error(`Failed to download Drive file: ${fileResponse.status}`);
   }
 
-  const arrayBuffer = await fileResponse.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  const chunks: string[] = [];
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
-  }
-  const base64 = btoa(chunks.join(''));
+  const blob = await fileResponse.blob();
+
+  // Use FileReader to safely and efficiently convert the Blob to a Base64 string,
+  // avoiding "Maximum call stack size exceeded" from spreading large arrays into
+  // String.fromCharCode(), and avoiding OOM from btoa(chunks.join('')) on large files.
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip the data URI prefix "data:<type>;base64,"
+      resolve(result.substring(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(new Error(`Failed to read Drive file into Base64: ${reader.error?.message ?? 'Unknown error'}`));
+    reader.readAsDataURL(blob);
+  });
 
   return { data: base64, mimeType: meta.mimeType };
 }
