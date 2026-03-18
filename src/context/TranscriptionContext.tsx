@@ -38,7 +38,7 @@ export type TranscriptionAction =
 // ─────────────────────────────────────────────────────────────────────────────
 // Initial state
 // ─────────────────────────────────────────────────────────────────────────────
-export const initialState: TranscriptionState = {
+const initialState: TranscriptionState = {
   pipeline: {
     stage: 'INIT',
     status: 'idle',
@@ -251,6 +251,7 @@ interface TranscriptionContextValue {
   dispatch: React.Dispatch<TranscriptionAction>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const TranscriptionContext = createContext<TranscriptionContextValue | null>(null);
 
 // ─────────────────────────────────────────────────────────────────────────────
