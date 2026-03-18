@@ -77,7 +77,19 @@ export const InputPage = React.memo(function InputPage() {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      startLoading('Reading file…');
+      startLoading('Uploading file…');
+      onProgress(5, `Saving file to Cloud Storage (mtp-storage/Recordings/)…`);
+
+      // Upload the file to mtp-storage/Recordings/ – non-fatal if it fails
+      try {
+        const accessToken = await requestAccessToken();
+        await uploadRecordingBlob(file, file.name, accessToken);
+        onProgress(25, 'File saved. Transcribing…');
+      } catch (uploadErr) {
+        console.warn('File GCS upload failed (continuing with transcription):', uploadErr);
+        onProgress(25, 'Transcribing…');
+      }
+
       const result = await processAudioFile(file, onProgress, onError);
       if (result) finishLoading(result.speakers, result.transcript);
     },
