@@ -57,7 +57,9 @@ export interface EditedData {
 // Generated outputs
 // ─────────────────────────────────────────────────────────────────────────────
 export interface Outputs {
-  summary: string;
+  executiveSummary: string;
+  structuredSummary: string;
+  behaviouralSummary: string;
   remarks: SpeakerRemark[];
   notebookLmUrl: string | null;
   cloudStorageUrl: string | null;

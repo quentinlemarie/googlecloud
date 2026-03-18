@@ -112,10 +112,10 @@ export async function generateOutputs(
   state: Pick<TranscriptionState, 'edited'>,
   onProgress: ProgressCallback,
   onError: ErrorCallback
-): Promise<{ summary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
+): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
   try {
     onProgress(10, 'Generating summary…');
-    const { summary, remarks, warnings } = await generateSummaryAndRemarks(
+    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
       state.edited.transcript,
       state.edited.speakers
     );
@@ -125,7 +125,7 @@ export async function generateOutputs(
     }
 
     onProgress(100, 'Done');
-    return { summary, remarks };
+    return { executiveSummary, structuredSummary, behaviouralSummary, remarks };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);
@@ -139,13 +139,39 @@ export async function generateOutputs(
  */
 export async function saveToCloudStorage(
   transcript: string,
-  summary: string,
+  executiveSummary: string,
+  structuredSummary: string,
+  behaviouralSummary: string,
+  remarks: { speakerName: string; remark: string }[],
   filename: string,
   onError: ErrorCallback
 ): Promise<string | null> {
   try {
     const accessToken = await requestAccessToken();
-    const content = `SUMMARY\n=======\n${summary}\n\nTRANSCRIPT\n==========\n${transcript}`;
+    const remarksText = remarks
+      .map((r) => `- ${r.speakerName || 'Speaker'}: ${r.remark}`)
+      .join('\n');
+    const content = [
+      'EXECUTIVE SUMMARY',
+      '=================',
+      executiveSummary,
+      '',
+      'STRUCTURED SUMMARY',
+      '==================',
+      structuredSummary,
+      '',
+      'BEHAVIOURAL SUMMARY',
+      '===================',
+      behaviouralSummary,
+      '',
+      'INDIVIDUAL BEHAVIOURAL REMARKS',
+      '==============================',
+      remarksText,
+      '',
+      'TRANSCRIPT',
+      '==========',
+      transcript,
+    ].join('\n');
     const url = await uploadToCloudStorage(content, filename, accessToken);
     return url;
   } catch (err) {

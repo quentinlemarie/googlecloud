@@ -52,7 +52,9 @@ export const GeminiTranscriptionResponseSchema = z.object({
 
 // Summary response
 export const GeminiSummaryResponseSchema = z.object({
-  summary: z.string(),
+  executiveSummary: z.string(),
+  structuredSummary: z.string(),
+  behaviouralSummary: z.string(),
   remarks: z.array(
     z.object({
       speakerId: z.string(),

@@ -132,7 +132,7 @@ export function validateSummaryResponse(raw: unknown): ValidationResult<GeminiSu
 
   const data = parsed.success
     ? parsed.data
-    : { summary: '', remarks: [] };
+    : { executiveSummary: '', structuredSummary: '', behaviouralSummary: '', remarks: [] };
 
   // Sanitize names inside remarks
   const cleanedRemarks = data.remarks.map((r) => ({

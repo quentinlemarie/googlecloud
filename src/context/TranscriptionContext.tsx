@@ -24,7 +24,7 @@ export type TranscriptionAction =
   | { type: 'UPDATE_TRANSCRIPT_ENTRY'; entry: TranscriptEntry }
   | { type: 'SET_SUMMARY'; summary: string }
   | { type: 'SET_REMARKS'; remarks: SpeakerRemark[] }
-  | { type: 'SET_OUTPUTS'; summary: string; remarks: SpeakerRemark[] }
+  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[] }
   | { type: 'SET_CLOUD_STORAGE_URL'; url: string }
   | { type: 'SET_NOTEBOOK_LM_URL'; url: string }
   | { type: 'OPEN_SPEAKER_MODAL'; entryId: string }
@@ -55,7 +55,9 @@ const initialState: TranscriptionState = {
     transcript: [],
   },
   outputs: {
-    summary: '',
+    executiveSummary: '',
+    structuredSummary: '',
+    behaviouralSummary: '',
     remarks: [],
     notebookLmUrl: null,
     cloudStorageUrl: null,
@@ -146,7 +148,7 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
       };
 
     case 'SET_SUMMARY':
-      return { ...state, outputs: { ...state.outputs, summary: action.summary } };
+      return { ...state, outputs: { ...state.outputs, executiveSummary: action.summary } };
 
     case 'SET_REMARKS':
       return { ...state, outputs: { ...state.outputs, remarks: action.remarks } };
@@ -154,7 +156,13 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
     case 'SET_OUTPUTS':
       return {
         ...state,
-        outputs: { ...state.outputs, summary: action.summary, remarks: action.remarks },
+        outputs: {
+          ...state.outputs,
+          executiveSummary: action.executiveSummary,
+          structuredSummary: action.structuredSummary,
+          behaviouralSummary: action.behaviouralSummary,
+          remarks: action.remarks,
+        },
       };
 
     case 'SET_CLOUD_STORAGE_URL':

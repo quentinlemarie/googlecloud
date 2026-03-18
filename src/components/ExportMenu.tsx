@@ -1,16 +1,81 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useEffect } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { saveToCloudStorage } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
 
-interface ExportMenuProps {
-  transcriptText: string;
+// ─────────────────────────────────────────────────────────────────────────────
+// Content builders
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildLinearTranscript(
+  transcript: { speakerId: string; text: string }[],
+  speakerMap: Record<string, string>
+): string {
+  return transcript.map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`).join('\n');
 }
 
-export const ExportMenu = React.memo(function ExportMenu({ transcriptText }: ExportMenuProps) {
+function buildSummariesText(executiveSummary: string, structuredSummary: string): string {
+  return [
+    'EXECUTIVE SUMMARY',
+    '=================',
+    executiveSummary,
+    '',
+    'STRUCTURED SUMMARY',
+    '==================',
+    structuredSummary,
+  ].join('\n');
+}
+
+function buildBehaviouralText(
+  behaviouralSummary: string,
+  remarks: { speakerName: string; remark: string }[]
+): string {
+  const remarksText = remarks
+    .map((r) => `- ${r.speakerName || 'Speaker'}: ${r.remark}`)
+    .join('\n');
+  return [
+    'BEHAVIOURAL SUMMARY',
+    '===================',
+    behaviouralSummary,
+    '',
+    'INDIVIDUAL BEHAVIOURAL REMARKS',
+    '==============================',
+    remarksText,
+  ].join('\n');
+}
+
+function downloadText(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ExportMenu = React.memo(function ExportMenu() {
   const { state, dispatch } = useTranscription();
   const { exportMenuOpen } = state.ui;
+  const { executiveSummary, structuredSummary, behaviouralSummary, remarks } = state.outputs;
+  const { speakers, transcript } = state.edited;
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const speakerMap = useMemo(
+    () => Object.fromEntries(speakers.map((s) => [s.id, s.name || s.label])),
+    [speakers]
+  );
+
+  const linearTranscript = useMemo(
+    () => buildLinearTranscript(transcript, speakerMap),
+    [transcript, speakerMap]
+  );
+
+  const dateSlug = new Date().toISOString().slice(0, 10);
 
   // Close when clicking outside
   useEffect(() => {
@@ -24,43 +89,89 @@ export const ExportMenu = React.memo(function ExportMenu({ transcriptText }: Exp
     return () => document.removeEventListener('mousedown', handler);
   }, [exportMenuOpen, dispatch]);
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(transcriptText).catch(() => {});
-    dispatch({ type: 'SET_EXPORT_MENU_OPEN', open: false });
-  }, [transcriptText, dispatch]);
+  const close = useCallback(
+    () => dispatch({ type: 'SET_EXPORT_MENU_OPEN', open: false }),
+    [dispatch]
+  );
 
-  const handleDownload = useCallback(() => {
-    const blob = new Blob([transcriptText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `transcript-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    dispatch({ type: 'SET_EXPORT_MENU_OPEN', open: false });
-  }, [transcriptText, dispatch]);
+  // ── Download handlers ──────────────────────────────────────────────────
+
+  const handleDownloadSummaries = useCallback(() => {
+    downloadText(buildSummariesText(executiveSummary, structuredSummary), `summaries-${dateSlug}.txt`);
+    close();
+  }, [executiveSummary, structuredSummary, dateSlug, close]);
+
+  const handleDownloadSummariesAndBeh = useCallback(() => {
+    const content = [
+      buildSummariesText(executiveSummary, structuredSummary),
+      '',
+      buildBehaviouralText(behaviouralSummary, remarks),
+    ].join('\n');
+    downloadText(content, `summaries-behaviours-${dateSlug}.txt`);
+    close();
+  }, [executiveSummary, structuredSummary, behaviouralSummary, remarks, dateSlug, close]);
+
+  const handleDownloadFull = useCallback(() => {
+    const content = [
+      buildSummariesText(executiveSummary, structuredSummary),
+      '',
+      buildBehaviouralText(behaviouralSummary, remarks),
+      '',
+      'LINEAR TRANSCRIPT',
+      '=================',
+      linearTranscript,
+    ].join('\n');
+    downloadText(content, `full-report-${dateSlug}.txt`);
+    close();
+  }, [executiveSummary, structuredSummary, behaviouralSummary, remarks, linearTranscript, dateSlug, close]);
+
+  const handleDownloadTranscript = useCallback(() => {
+    downloadText(
+      ['LINEAR TRANSCRIPT', '=================', linearTranscript].join('\n'),
+      `transcript-${dateSlug}.txt`
+    );
+    close();
+  }, [linearTranscript, dateSlug, close]);
+
+  // ── Other actions ──────────────────────────────────────────────────────
+
+  const handleCopy = useCallback(() => {
+    const content = [
+      buildSummariesText(executiveSummary, structuredSummary),
+      '',
+      buildBehaviouralText(behaviouralSummary, remarks),
+      '',
+      'LINEAR TRANSCRIPT',
+      '=================',
+      linearTranscript,
+    ].join('\n');
+    navigator.clipboard.writeText(content).catch(() => {});
+    close();
+  }, [executiveSummary, structuredSummary, behaviouralSummary, remarks, linearTranscript, close]);
 
   const handleSaveToCloud = useCallback(async () => {
-    dispatch({ type: 'SET_EXPORT_MENU_OPEN', open: false });
+    close();
     const url = await saveToCloudStorage(
-      transcriptText,
-      state.outputs.summary,
+      linearTranscript,
+      executiveSummary,
+      structuredSummary,
+      behaviouralSummary,
+      remarks,
       `transcript-${Date.now()}.txt`,
       (message) => dispatch({ type: 'SET_ERROR', message })
     );
     if (url) {
       dispatch({ type: 'SET_CLOUD_STORAGE_URL', url });
     }
-  }, [transcriptText, state.outputs.summary, dispatch]);
+  }, [linearTranscript, executiveSummary, structuredSummary, behaviouralSummary, remarks, dispatch, close]);
 
   const handleNotebookLM = useCallback(() => {
-    // NotebookLM deep link with transcript as source
-    const encoded = encodeURIComponent(transcriptText.slice(0, 2000));
+    const encoded = encodeURIComponent(linearTranscript.slice(0, 2000));
     const url = `https://notebooklm.google.com/?source=${encoded}`;
     window.open(url, '_blank', 'noopener,noreferrer');
     dispatch({ type: 'SET_NOTEBOOK_LM_URL', url });
-    dispatch({ type: 'SET_EXPORT_MENU_OPEN', open: false });
-  }, [transcriptText, dispatch]);
+    close();
+  }, [linearTranscript, dispatch, close]);
 
   return (
     <div className="relative" ref={menuRef}>
@@ -73,18 +184,49 @@ export const ExportMenu = React.memo(function ExportMenu({ transcriptText }: Exp
       </button>
 
       {exportMenuOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-40 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-40 overflow-hidden">
+          {/* Download options */}
+          <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+            Download
+          </div>
+          <button
+            onClick={handleDownloadSummaries}
+            className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            📄 Summaries
+            <span className="block text-xs text-gray-400">Executive + Structured summary</span>
+          </button>
+          <button
+            onClick={handleDownloadSummariesAndBeh}
+            className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            📊 Summaries &amp; Behaviours
+            <span className="block text-xs text-gray-400">Summaries + Behavioural analysis</span>
+          </button>
+          <button
+            onClick={handleDownloadFull}
+            className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            📋 Summaries, Behaviours &amp; Transcript
+            <span className="block text-xs text-gray-400">Full report with linear transcript</span>
+          </button>
+          <button
+            onClick={handleDownloadTranscript}
+            className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
+          >
+            🗒️ Transcript only
+            <span className="block text-xs text-gray-400">Linear transcript</span>
+          </button>
+
+          {/* Other actions */}
+          <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+            Other
+          </div>
           <button
             onClick={handleCopy}
             className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
           >
-            📋 Copy to clipboard
-          </button>
-          <button
-            onClick={handleDownload}
-            className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            ⬇️ Download .txt
+            📋 Copy full report to clipboard
           </button>
           <button
             onClick={handleSaveToCloud}
@@ -103,3 +245,4 @@ export const ExportMenu = React.memo(function ExportMenu({ transcriptText }: Exp
     </div>
   );
 });
+
