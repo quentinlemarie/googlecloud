@@ -2,8 +2,9 @@ import { GCP_PROJECT_ID } from './constants';
 
 /**
  * Reports an error to GCP Cloud Error Reporting.
- * If the project ID is not configured the error is silently logged to console
- * so the app still works in development without GCP credentials.
+ * If the project ID is not configured, or if no access token is provided,
+ * the error is silently logged to the console only – the app continues to
+ * work in development without GCP credentials.
  */
 export async function reportError(
   err: unknown,

@@ -45,13 +45,24 @@ export const SpeakerEditor = React.memo(function SpeakerEditor({
   const hasPending =
     name !== debouncedName || role !== debouncedRole || company !== debouncedCompany;
 
+  // Keep a stable ref to the speaker base so the debounce effect always has
+  // the latest non-edited fields (id, color, label, timestamp) without
+  // itself needing to re-run when speaker identity changes.
+  const speakerRef = useRef(speaker);
+  speakerRef.current = speaker;
+
   // Commit debounced values to context
   useEffect(() => {
     dispatch({
       type: 'UPDATE_SPEAKER',
-      speaker: { ...speaker, name: debouncedName, role: debouncedRole, company: debouncedCompany },
+      speaker: {
+        ...speakerRef.current,
+        name: debouncedName,
+        role: debouncedRole,
+        company: debouncedCompany,
+      },
     });
-  }, [debouncedName, debouncedRole, debouncedCompany]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dispatch, debouncedName, debouncedRole, debouncedCompany]);
 
   // Immediate commit on blur or Enter
   const commitNow = useCallback(() => {
