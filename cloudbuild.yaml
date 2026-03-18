@@ -36,7 +36,7 @@ steps:
       - --image
       - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/smart-transcription:$COMMIT_SHA
       - --region
-      - $_SERVICE_REGION
+      - $_DEPLOY_REGION
       - --platform
       - managed
       - --quiet
