@@ -217,7 +217,14 @@ function loadFromStorage(): TranscriptionState {
     const raw = localStorage.getItem(LS_STATE_KEY);
     if (!raw) return initialState;
     const parsed = JSON.parse(raw) as Partial<TranscriptionState>;
-    return { ...initialState, ...parsed };
+    const state = { ...initialState, ...parsed };
+    // Transient processing stages cannot be resumed after a page reload.
+    // Reset them to INIT so the user is never permanently stuck on the
+    // loading screen with no way to cancel.
+    if (state.pipeline.stage === 'LOADING' || state.pipeline.stage === 'SUMMARIZING') {
+      return { ...state, pipeline: initialState.pipeline };
+    }
+    return state;
   } catch {
     return initialState;
   }
