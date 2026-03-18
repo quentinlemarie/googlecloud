@@ -7,7 +7,86 @@ import type { Speaker, TranscriptEntry, SpeakerRemark } from '../types';
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function callGemini(prompt: string, audioPart?: { inlineData: { mimeType: string; data: string } }): Promise<string> {
+// Gemini inline-data limit: ~20 MB base64 (~15 MB raw). Files larger than this
+// must be uploaded via the File API first.
+const INLINE_SIZE_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
+
+/**
+ * Uploads audio data to the Gemini File API and returns the hosted file URI.
+ * The API key is required by this endpoint; omitting it causes a 403 error.
+ */
+export async function uploadFileToGemini(
+  base64Data: string,
+  mimeType: string,
+): Promise<string> {
+  // Decode base64 → binary
+  const binaryStr = atob(base64Data);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  // Multipart body: JSON metadata + binary file bytes
+  const boundary = `boundary_${crypto.randomUUID().replace(/-/g, '')}`;
+  const metadataJson = JSON.stringify({ file: { display_name: 'audio' } });
+  const metadataPart =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=utf-8\r\n\r\n` +
+    `${metadataJson}\r\n`;
+  const filePart = `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`;
+  const closing = `\r\n--${boundary}--`;
+
+  const bodyParts: (string | Uint8Array)[] = [
+    new TextEncoder().encode(metadataPart),
+    new TextEncoder().encode(filePart),
+    bytes,
+    new TextEncoder().encode(closing),
+  ];
+  const totalLength = bodyParts.reduce(
+    (acc, p) => acc + (typeof p === 'string' ? p.length : p.byteLength),
+    0,
+  );
+  const body = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of bodyParts) {
+    const chunk = typeof part === 'string' ? new TextEncoder().encode(part) : part;
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const uploadResponse = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+        'X-Goog-Upload-Protocol': 'multipart',
+      },
+      body,
+    },
+  );
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`Gemini File API upload error ${uploadResponse.status}: ${errorText}`);
+  }
+
+  const uploadData = (await uploadResponse.json()) as {
+    file?: { uri?: string; state?: string };
+  };
+
+  const fileUri = uploadData.file?.uri;
+  if (!fileUri) {
+    throw new Error('Gemini File API did not return a file URI');
+  }
+
+  return fileUri;
+}
+
+type AudioPart =
+  | { inlineData: { mimeType: string; data: string } }
+  | { fileData: { mimeType: string; fileUri: string } };
+
+async function callGemini(prompt: string, audioPart?: AudioPart): Promise<string> {
   const parts: unknown[] = [{ text: prompt }];
   if (audioPart) parts.push(audioPart);
 
@@ -86,9 +165,19 @@ Rules:
 - Timestamps must be accurate to the audio
 `.trim();
 
-  const audioPart = {
-    inlineData: { mimeType, data: audioBase64 },
-  };
+  // Decode the base64 string to measure the raw byte length so we can decide
+  // whether to send inline (small files) or via the File API (large files).
+  // Base64: 4 chars → 3 bytes. Subtract padding to avoid overestimating.
+  const paddingChars = (audioBase64.match(/={1,2}$/) ?? [''])[0].length;
+  const rawByteLength = Math.floor((audioBase64.length * 3) / 4) - paddingChars;
+
+  let audioPart: AudioPart;
+  if (rawByteLength > INLINE_SIZE_LIMIT_BYTES) {
+    const fileUri = await uploadFileToGemini(audioBase64, mimeType);
+    audioPart = { fileData: { mimeType, fileUri } };
+  } else {
+    audioPart = { inlineData: { mimeType, data: audioBase64 } };
+  }
 
   const raw = await callGemini(prompt, audioPart);
   const parsed = extractJSON(raw);
