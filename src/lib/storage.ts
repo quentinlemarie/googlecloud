@@ -133,9 +133,15 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
     const picker_ns = window.google!.picker!;
 
     const mediaView = new picker_ns.DocsView(picker_ns.ViewId.DOCS)
-      // Include specific audio subtypes alongside wildcards to ensure Google
-      // Picker filters them reliably (wildcard-only can miss some formats).
-      .setMimeTypes('audio/*,video/*,audio/mp4,audio/x-m4a,audio/m4a,audio/mpeg,audio/wav')
+      // List every concrete MIME type we want to surface.  Google Picker's
+      // setMimeTypes() does not support wildcards (e.g. "audio/*"), so we
+      // enumerate the common audio and video formats explicitly.
+      .setMimeTypes(
+        'audio/mpeg,audio/mp4,audio/x-m4a,audio/m4a,audio/wav,audio/webm,' +
+        'audio/ogg,audio/flac,audio/aac,audio/x-aac,' +
+        'video/mp4,video/mpeg,video/quicktime,video/webm,video/x-msvideo,' +
+        'video/ogg,video/3gpp,video/x-matroska'
+      )
       .setMode(picker_ns.DocsViewMode.LIST)
       .setLabel('Media (Audio/Video)');
 

@@ -16,11 +16,12 @@ export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyDBzu
 // REQUIRED for GCP Error Reporting
 export const GCP_PROJECT_ID = import.meta.env.VITE_GCP_PROJECT_ID || 'named-trilogy-247110';
 
-// Optional: Default folder for Drive Picker
-export const REC_FOLDER_ID = import.meta.env.VITE_REC_FOLDER_ID || 'Recordings';
-
 // Sentinel value used to detect unconfigured folder ID
 export const PLACEHOLDER_FOLDER_ID = 'YOUR_FOLDER_ID_HERE';
+
+// Optional: Default folder for Drive Picker
+// When not set (or set to the placeholder), the picker falls back to root.
+export const REC_FOLDER_ID = import.meta.env.VITE_REC_FOLDER_ID || PLACEHOLDER_FOLDER_ID;
 
 export const GCS_BUCKET = import.meta.env.VITE_GCS_BUCKET || 'mtp-storage';
 
