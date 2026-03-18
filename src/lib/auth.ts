@@ -44,6 +44,13 @@ function loadGoogleIdentityServices(): Promise<void> {
  * @throws  Error with user-friendly message on failure or popup block.
  */
 export async function requestAccessToken(): Promise<string> {
+  if (!CLIENT_ID) {
+    throw new Error(
+      'Google OAuth client ID is not configured. ' +
+      'Set the VITE_GOOGLE_CLIENT_ID environment variable and rebuild.'
+    );
+  }
+
   await loadGoogleIdentityServices();
 
   return new Promise<string>((resolve, reject) => {
