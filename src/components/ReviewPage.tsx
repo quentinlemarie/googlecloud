@@ -16,7 +16,7 @@ export const ReviewPage = React.memo(function ReviewPage({
 }: ReviewPageProps) {
   const { state, dispatch } = useTranscription();
   const speakers = state.edited.speakers;
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<'restart' | null>(null);
 
   const handleConfirm = useCallback(async () => {
     dispatch({
@@ -84,21 +84,21 @@ export const ReviewPage = React.memo(function ReviewPage({
             Confirm & Generate Summary
           </button>
           <button
-            onClick={() => setShowConfirm(true)}
-            className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+            onClick={() => setConfirmTarget('restart')}
+            className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors mt-1"
           >
-            Cancel &amp; start over
+            ↺ Restart from scratch
           </button>
         </div>
       </div>
 
-      {showConfirm && (
+      {confirmTarget === 'restart' && (
         <ConfirmDialog
-          message="Discard the current transcription and go back to the selection menu?"
-          confirmLabel="Yes, start over"
+          message="Restart from scratch? All current progress will be lost."
+          confirmLabel="Yes, restart"
           cancelLabel="Keep reviewing"
           onConfirm={() => dispatch({ type: 'RESET' })}
-          onCancel={() => setShowConfirm(false)}
+          onCancel={() => setConfirmTarget(null)}
         />
       )}
     </div>

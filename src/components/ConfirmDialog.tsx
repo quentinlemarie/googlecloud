@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { BRAND_RED } from '../lib/constants';
 
 interface ConfirmDialogProps {
@@ -16,14 +16,20 @@ export const ConfirmDialog = React.memo(function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  // Use a ref so the keydown handler always calls the latest onCancel without
+  // needing it in the dependency array (avoids unnecessary effect re-runs when
+  // the parent renders a new function reference).
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Escape') onCancelRef.current();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onCancel]);
+  }, []);
 
   return (
     <div

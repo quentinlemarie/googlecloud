@@ -27,7 +27,7 @@ export const Header = React.memo(function Header({ transcriptText }: HeaderProps
               onClick={() => setShowConfirm(true)}
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
-              Start over
+              ↺ Restart
             </button>
             <ExportMenu transcriptText={transcriptText} />
           </div>
@@ -36,8 +36,8 @@ export const Header = React.memo(function Header({ transcriptText }: HeaderProps
 
       {showConfirm && (
         <ConfirmDialog
-          message="Discard the current output and go back to the selection menu?"
-          confirmLabel="Yes, start over"
+          message="Restart from scratch? All current output will be lost."
+          confirmLabel="Yes, restart"
           cancelLabel="Stay here"
           onConfirm={() => dispatch({ type: 'RESET' })}
           onCancel={() => setShowConfirm(false)}

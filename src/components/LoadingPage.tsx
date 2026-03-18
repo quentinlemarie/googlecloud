@@ -3,16 +3,36 @@ import { useTranscription } from '../context/useTranscription';
 import { BRAND_RED } from '../lib/constants';
 import { ConfirmDialog } from './ConfirmDialog';
 
+type ConfirmTarget = 'cancel' | 'restart';
+
 export const LoadingPage = React.memo(function LoadingPage() {
   const { state, dispatch } = useTranscription();
-  const { progress, message } = state.pipeline;
-  const [showConfirm, setShowConfirm] = useState(false);
+  const { progress, message, stage } = state.pipeline;
+  const isSummarizing = stage === 'SUMMARIZING';
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
 
-  const handleCancel = () => setShowConfirm(true);
-  const handleConfirmCancel = () => {
-    setShowConfirm(false);
-    dispatch({ type: 'RESET' });
+  const handleConfirm = () => {
+    if (confirmTarget === 'cancel' && isSummarizing) {
+      // Go back to review so the user can re-edit before re-generating
+      dispatch({ type: 'SET_STAGE', stage: 'REVIEW' });
+    } else {
+      // For LOADING stage, or Restart from any stage: full reset
+      dispatch({ type: 'RESET' });
+    }
+    setConfirmTarget(null);
   };
+
+  const cancelDialogProps = isSummarizing
+    ? {
+        message: 'Stop generating and go back to the review page?',
+        confirmLabel: 'Yes, go back',
+        cancelLabel: 'Keep waiting',
+      }
+    : {
+        message: 'Cancel the current processing and go back to the selection menu?',
+        confirmLabel: 'Yes, cancel',
+        cancelLabel: 'Keep waiting',
+      };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
@@ -55,22 +75,38 @@ export const LoadingPage = React.memo(function LoadingPage() {
           </svg>
         </div>
 
-        {/* Cancel button */}
-        <button
-          onClick={handleCancel}
-          className="mt-8 text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
-        >
-          Cancel
-        </button>
+        {/* Cancel / Restart buttons */}
+        <div className="mt-8 flex items-center justify-center gap-6">
+          <button
+            onClick={() => setConfirmTarget('cancel')}
+            className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+          >
+            {isSummarizing ? '← Back to review' : 'Cancel'}
+          </button>
+          <button
+            onClick={() => setConfirmTarget('restart')}
+            className="text-sm text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+          >
+            ↺ Restart from scratch
+          </button>
+        </div>
       </div>
 
-      {showConfirm && (
+      {confirmTarget === 'cancel' && (
         <ConfirmDialog
-          message="Cancel the current processing and start over?"
-          confirmLabel="Yes, cancel"
+          {...cancelDialogProps}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+
+      {confirmTarget === 'restart' && (
+        <ConfirmDialog
+          message="Restart from scratch? All current progress will be lost."
+          confirmLabel="Yes, restart"
           cancelLabel="Keep waiting"
-          onConfirm={handleConfirmCancel}
-          onCancel={() => setShowConfirm(false)}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirmTarget(null)}
         />
       )}
     </div>
