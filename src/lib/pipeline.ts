@@ -12,6 +12,7 @@ import {
 } from './storage';
 import { requestAccessToken } from './auth';
 import { reportError } from './errorReporting';
+import { mimeToExtension } from '../utils/mimeUtils';
 
 export type ProgressCallback = (progress: number, message: string) => void;
 export type ErrorCallback = (message: string) => void;
@@ -353,7 +354,7 @@ export async function saveToDrive(
 
       // Convert base64 to Blob and upload audio
       const audioBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-      const ext = audioMimeType.split('/')[1]?.replace('x-', '') || 'webm';
+      const ext = mimeToExtension(audioMimeType);
       const audioBlob = new Blob([audioBytes], { type: audioMimeType });
       await uploadBlobToDrive(
         audioBlob,

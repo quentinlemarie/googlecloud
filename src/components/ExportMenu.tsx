@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react'
 import { useTranscription } from '../context/useTranscription';
 import { saveToDrive, buildExportBaseName } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
+import { mimeToExtension } from '../utils/mimeUtils';
 import {
   ExportContentPicker,
   type ExportAction,
@@ -199,7 +200,7 @@ export const ExportMenu = React.memo(function ExportMenu() {
               atob(state.rawData.audioBase64),
               (c) => c.charCodeAt(0),
             );
-            const ext = state.rawData.mimeType.split('/')[1]?.replace('x-', '') || 'webm';
+            const ext = mimeToExtension(state.rawData.mimeType);
             const audioBlob = new Blob([audioBytes], { type: state.rawData.mimeType });
             downloadBlob(audioBlob, `${baseName}.${ext}`);
           }
