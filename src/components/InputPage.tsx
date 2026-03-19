@@ -173,10 +173,10 @@ export const InputPage = React.memo(function InputPage() {
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
 
-      // Only accept audio files (check MIME type first, fall back to extension)
-      const audioExtensions = /\.(mp3|wav|m4a|webm|ogg|flac|aac|wma|opus)$/i;
-      if (!file.type.startsWith('audio/') && !audioExtensions.test(file.name)) {
-        onError('Please drop an audio file (MP3, WAV, M4A, WebM…)');
+      // Only accept audio or video files (check MIME type first, fall back to extension)
+      const mediaExtensions = /\.(mp3|wav|m4a|webm|ogg|flac|aac|wma|opus|mp4|mov|avi|mkv|m4v)$/i;
+      if (!file.type.startsWith('audio/') && !file.type.startsWith('video/') && !mediaExtensions.test(file.name)) {
+        onError('Please drop an audio or video file (MP3, WAV, M4A, MP4, MOV…)');
         return;
       }
 
@@ -263,8 +263,8 @@ export const InputPage = React.memo(function InputPage() {
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-red-50/80 backdrop-blur-sm border-4 border-dashed border-red-400 rounded-2xl m-4 pointer-events-none">
           <div className="text-center">
             <span className="text-6xl block mb-4">🎵</span>
-            <p className="text-xl font-semibold text-red-600">Drop your audio file here</p>
-            <p className="text-sm text-red-400 mt-1">MP3, WAV, M4A, WebM…</p>
+            <p className="text-xl font-semibold text-red-600">Drop your audio or video file here</p>
+            <p className="text-sm text-red-400 mt-1">MP3, WAV, M4A, MP4, MOV, WebM…</p>
           </div>
         </div>
       )}
@@ -287,7 +287,7 @@ export const InputPage = React.memo(function InputPage() {
             <span className="text-3xl">🗂️</span>
             <div className="text-left">
               <div className="font-semibold text-gray-800">Google Drive</div>
-              <div className="text-sm text-gray-500">Pick an audio file from your Drive</div>
+              <div className="text-sm text-gray-500">Pick an audio or video file from your Drive</div>
             </div>
           </button>
 
@@ -299,13 +299,13 @@ export const InputPage = React.memo(function InputPage() {
             <span className="text-3xl">📁</span>
             <div className="text-left">
               <div className="font-semibold text-gray-800">Upload File</div>
-              <div className="text-sm text-gray-500">MP3, WAV, M4A, WebM…</div>
+              <div className="text-sm text-gray-500">MP3, WAV, M4A, MP4, MOV…</div>
             </div>
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/*"
+            accept="audio/*,video/*"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -357,7 +357,7 @@ export const InputPage = React.memo(function InputPage() {
 
           {/* Drag-and-drop hint */}
           <p className="text-center text-xs text-gray-400 pt-2">
-            or drag &amp; drop an audio file anywhere on this page
+            or drag &amp; drop an audio or video file anywhere on this page
           </p>
         </div>
       </div>
