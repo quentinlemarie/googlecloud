@@ -33,10 +33,109 @@ async function callGemini(prompt: string, audioPart?: { inlineData: { mimeType: 
   return text;
 }
 
+/**
+ * Attempts to repair common LLM JSON issues:
+ *  - Trailing commas before } or ]
+ *  - Single-quoted property names / string values
+ *  - JavaScript-style single-line comments
+ */
+export function repairJSON(text: string): string {
+  let s = text;
+
+  // 1. Remove single-line JS comments (// …) that are NOT inside strings.
+  //    Walk the string character-by-character to respect quoted regions.
+  let result = '';
+  let inString = false;
+  let stringChar = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    const next = s[i + 1];
+
+    if (inString) {
+      result += ch;
+      if (ch === '\\') {
+        // skip escaped character
+        result += next ?? '';
+        i++;
+      } else if (ch === stringChar) {
+        inString = false;
+      }
+    } else {
+      if (ch === '"' || ch === "'") {
+        inString = true;
+        stringChar = ch;
+        result += ch;
+      } else if (ch === '/' && next === '/') {
+        // consume the rest of the line (the comment)
+        while (i < s.length && s[i] !== '\n') i++;
+        // keep the newline so line structure stays intact
+        result += '\n';
+      } else {
+        result += ch;
+      }
+    }
+  }
+  s = result;
+
+  // 2. Replace single-quoted keys/values with double-quoted equivalents.
+  //    Walk character-by-character to avoid false positives inside double-quoted strings.
+  result = '';
+  inString = false;
+  stringChar = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    const next = s[i + 1];
+
+    if (inString) {
+      if (ch === '\\') {
+        result += ch + (next ?? '');
+        i++;
+      } else if (ch === stringChar) {
+        // End of single-quoted string → emit double quote
+        result += stringChar === "'" ? '"' : ch;
+        inString = false;
+      } else {
+        // Inside a single-quoted string: escape any unescaped double quotes
+        if (stringChar === "'" && ch === '"') {
+          result += '\\"';
+        } else {
+          result += ch;
+        }
+      }
+    } else {
+      if (ch === "'") {
+        inString = true;
+        stringChar = "'";
+        result += '"';
+      } else if (ch === '"') {
+        inString = true;
+        stringChar = '"';
+        result += ch;
+      } else {
+        result += ch;
+      }
+    }
+  }
+  s = result;
+
+  // 3. Remove trailing commas before } or ] (with optional whitespace between)
+  s = s.replace(/,\s*([}\]])/g, '$1');
+
+  return s;
+}
+
 function extractJSON(text: string): unknown {
   // Strip markdown code fences if present
   const cleaned = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
-  return JSON.parse(cleaned);
+
+  // Fast path: try parsing directly
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Slow path: attempt to repair common LLM JSON issues and retry
+    const repaired = repairJSON(cleaned);
+    return JSON.parse(repaired);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
