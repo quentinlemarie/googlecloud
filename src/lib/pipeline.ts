@@ -9,6 +9,27 @@ export type ProgressCallback = (progress: number, message: string) => void;
 export type ErrorCallback = (message: string) => void;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Slowly tick progress forward during a long-running async operation.
+// Uses an asymptotic curve: each tick covers ~12% of the remaining distance,
+// so the bar moves quickly at first and slows down as it approaches `to`.
+// Returns a cleanup function that stops the timer.
+// ─────────────────────────────────────────────────────────────────────────────
+function startProgressTicker(
+  onProgress: ProgressCallback,
+  message: string,
+  from: number,
+  to: number,
+  intervalMs = 2000,
+): () => void {
+  let current = from;
+  const timer = setInterval(() => {
+    current += (to - current) * 0.12;
+    onProgress(Math.round(current), message);
+  }, intervalMs);
+  return () => clearInterval(timer);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Convert a File or Blob to base64
 // ─────────────────────────────────────────────────────────────────────────────
 function fileToBase64(file: File | Blob): Promise<string> {
@@ -48,18 +69,19 @@ export async function processAudioFile(
   onError: ErrorCallback
 ): Promise<ProcessAudioResult | null> {
   try {
-    onProgress(10, 'Reading audio file…');
+    onProgress(30, 'Reading audio file…');
     const audioBase64 = await fileToBase64(file);
     const mimeType = file.type || 'audio/webm';
 
-    onProgress(30, 'Transcribing and identifying speakers…');
+    const stopTicker = startProgressTicker(onProgress, 'Transcribing and identifying speakers…', 30, 90);
     const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType);
+    stopTicker();
 
     if (warnings.length > 0) {
       console.warn('Transcription warnings:', warnings);
     }
 
-    onProgress(90, 'Cleaning up…');
+    onProgress(95, 'Cleaning up…');
     return { speakers, transcript, audioBase64, mimeType };
   } catch (err) {
     const message =
@@ -78,24 +100,26 @@ export async function processFromDrive(
   onError: ErrorCallback
 ): Promise<ProcessAudioResult | null> {
   try {
-    onProgress(5, 'Authenticating with Google…');
+    onProgress(2, 'Authenticating with Google…');
     const accessToken = await requestAccessToken();
 
-    onProgress(10, 'Opening Drive picker…');
+    onProgress(5, 'Opening Drive picker…');
     const selected = await openDrivePicker(accessToken);
     if (!selected) return null;
 
-    onProgress(20, `Downloading "${selected.name}" from Drive…`);
+    onProgress(8, `Downloading "${selected.name}" from Drive…`);
     const { data, mimeType } = await downloadDriveFile(selected.id, accessToken);
 
-    onProgress(35, 'Transcribing…');
+    onProgress(10, 'Transcribing…');
+    const stopTicker = startProgressTicker(onProgress, 'Transcribing…', 10, 90);
     const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType);
+    stopTicker();
 
     if (warnings.length > 0) {
       console.warn('Transcription warnings:', warnings);
     }
 
-    onProgress(90, 'Cleaning up…');
+    onProgress(95, 'Cleaning up…');
     return { speakers, transcript, audioBase64: data, mimeType };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -114,11 +138,13 @@ export async function generateOutputs(
   onError: ErrorCallback
 ): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
   try {
-    onProgress(10, 'Generating summary…');
+    onProgress(5, 'Generating summary…');
+    const stopTicker = startProgressTicker(onProgress, 'Generating summary…', 5, 95);
     const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
       state.edited.transcript,
       state.edited.speakers
     );
+    stopTicker();
 
     if (warnings.length > 0) {
       console.warn('Summary warnings:', warnings);
