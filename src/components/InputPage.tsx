@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { processAudioFile, processFromDrive } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
@@ -37,19 +37,27 @@ export const InputPage = React.memo(function InputPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
 
   // Live audio-level (0 – 1) for the visual indicator
   const audioLevel = useAudioLevel(micStream);
 
+  /** Stop all tracks on the current microphone stream to release the hardware. */
+  const releaseMicrophone = useCallback(() => {
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+    setMicStream(null);
+  }, []);
+
   const handleStopAndReset = useCallback(() => {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
-    setMicStream(null);
+    releaseMicrophone();
     dispatch({ type: 'RESET' });
     setConfirmTarget(null);
-  }, [dispatch]);
+  }, [dispatch, releaseMicrophone]);
 
   const startLoading = useCallback(
     (message: string) => {
@@ -126,6 +134,7 @@ export const InputPage = React.memo(function InputPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
+      micStreamRef.current = stream;
       setMicStream(stream);
 
       const { mimeType, ext } = chooseMimeType();
@@ -175,7 +184,14 @@ export const InputPage = React.memo(function InputPage() {
   const handleMicStop = useCallback(() => {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
-    setMicStream(null);
+    releaseMicrophone();
+  }, [releaseMicrophone]);
+
+  // Release microphone if the component unmounts while still recording
+  useEffect(() => {
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
   }, []);
 
   return (
