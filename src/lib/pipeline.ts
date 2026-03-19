@@ -222,24 +222,50 @@ export async function saveToCloudStorage(
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MEETING_TYPE_KEYWORDS: [string[], string][] = [
+  [['business review', 'account review', 'quarterly review', 'qbr'], 'Business Review'],
   [['interview', 'candidate', 'hiring', 'recruit'], 'Interview'],
   [['sales', 'pitch', 'demo', 'prospect', 'proposal'], 'Sales Call'],
   [['onboarding', 'orientation', 'welcome'], 'Onboarding'],
   [['standup', 'stand-up', 'sprint', 'scrum', 'retro', 'retrospective'], 'Team Sync'],
   [['board', 'quarterly', 'earnings', 'investor'], 'Board Meeting'],
-  [['training', 'workshop', 'course'], 'Training'],
+  [['training', 'workshop'], 'Training'],
   [['negotiation', 'contract', 'terms'], 'Negotiation'],
   [['review', 'performance', 'feedback', 'appraisal'], 'Review'],
   [['kickoff', 'kick-off', 'launch'], 'Kickoff'],
   [['support', 'troubleshoot', 'incident'], 'Support Call'],
 ];
 
-function guessMeetingType(text: string): string {
+/**
+ * Uses word-boundary matching to detect the meeting type from summary text.
+ * Word boundaries prevent false positives from vendor/company names that
+ * happen to contain a keyword as a substring.
+ */
+export function guessMeetingType(text: string): string {
   const lower = text.toLowerCase();
   for (const [keywords, label] of MEETING_TYPE_KEYWORDS) {
-    if (keywords.some((kw) => lower.includes(kw))) return label;
+    if (keywords.some((kw) => new RegExp(`\\b${kw}\\b`).test(lower))) return label;
   }
   return 'Meeting';
+}
+
+/**
+ * Role keywords that indicate a speaker belongs to the vendor / service-provider
+ * side rather than the client / customer side of the meeting.
+ */
+const VENDOR_ROLE_KEYWORDS = [
+  'instructor', 'trainer', 'facilitator', 'coach',
+  'consultant', 'advisor',
+  'account manager', 'account executive',
+  'customer success',
+  'sales rep', 'sales engineer',
+  'vendor', 'provider', 'supplier',
+];
+
+function hasVendorRole(speakers: Speaker[]): boolean {
+  return speakers.some((s) => {
+    const role = (s.role || '').toLowerCase();
+    return VENDOR_ROLE_KEYWORDS.some((kw) => role.includes(kw));
+  });
 }
 
 /**
@@ -271,10 +297,28 @@ export function buildExportBaseName(
   let stakeholderName = '';
 
   if (byCompany.size >= 2) {
-    // Company with fewest speakers is likely the client
-    const sorted = [...byCompany.entries()].sort((a, b) => a[1].length - b[1].length);
-    clientName = sorted[0][0];
-    const clientSpeakers = sorted[0][1];
+    const companies = [...byCompany.entries()];
+
+    // Try to identify the vendor by speaker roles; the non-vendor is the client.
+    const vendorIndices: number[] = [];
+    for (let i = 0; i < companies.length; i++) {
+      if (hasVendorRole(companies[i][1])) vendorIndices.push(i);
+    }
+
+    let clientEntry: [string, Speaker[]];
+    if (vendorIndices.length > 0 && vendorIndices.length < companies.length) {
+      // Pick the largest non-vendor company as the client
+      const nonVendor = companies.filter((_, i) => !vendorIndices.includes(i));
+      nonVendor.sort((a, b) => b[1].length - a[1].length);
+      clientEntry = nonVendor[0];
+    } else {
+      // Fallback: company with fewest speakers is likely the client
+      const sorted = [...companies].sort((a, b) => a[1].length - b[1].length);
+      clientEntry = sorted[0];
+    }
+
+    clientName = clientEntry[0];
+    const clientSpeakers = clientEntry[1];
 
     // Pick the stakeholder who spoke most
     const entryCounts = new Map<string, number>();
