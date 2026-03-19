@@ -58,11 +58,11 @@ const PRESETS: Preset[] = [
 ];
 
 const ALL_ELEMENTS: { key: ExportElement; label: string }[] = [
-  { key: 'executiveSummary', label: 'Executive Summary' },
-  { key: 'structuredSummary', label: 'Structured Summary' },
-  { key: 'behaviouralSummary', label: 'Behavioural Summary' },
-  { key: 'remarks', label: 'Individual Remarks' },
-  { key: 'transcript', label: 'Transcript' },
+  { key: 'executiveSummary', label: '📝 Executive Summary' },
+  { key: 'structuredSummary', label: '📊 Structured Summary' },
+  { key: 'behaviouralSummary', label: '🧠 Behavioural Summary' },
+  { key: 'remarks', label: '💬 Individual Remarks' },
+  { key: 'transcript', label: '📄 Transcript' },
 ];
 
 const ACTION_LABELS: Record<ExportAction, string> = {
@@ -136,10 +136,12 @@ export const ExportContentPicker = React.memo(function ExportContentPicker({
     });
   }, []);
 
+  const hasAudioSelected = audioSupported && includeAudio;
+
   const handleConfirm = useCallback(() => {
-    if (selectedElements.length === 0) return;
-    onConfirm({ elements: selectedElements, includeAudio: audioSupported && includeAudio });
-  }, [selectedElements, includeAudio, audioSupported, onConfirm]);
+    if (selectedElements.length === 0 && !hasAudioSelected) return;
+    onConfirm({ elements: selectedElements, includeAudio: hasAudioSelected });
+  }, [selectedElements, hasAudioSelected, onConfirm]);
 
   // Close on Escape
   useEffect(() => {
@@ -256,7 +258,7 @@ export const ExportContentPicker = React.memo(function ExportContentPicker({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={selectedElements.length === 0}
+            disabled={selectedElements.length === 0 && !hasAudioSelected}
             className="px-5 py-2 text-sm rounded-lg font-semibold text-white shadow hover:opacity-90 transition-opacity disabled:opacity-50"
             style={{ backgroundColor: BRAND_RED }}
           >

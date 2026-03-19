@@ -339,9 +339,10 @@ export async function saveToDrive(
     if (!folder) return null; // user cancelled
 
     const includeAudio = !!(audioBase64 && audioMimeType);
+    const hasText = textContent.length > 0;
 
-    if (includeAudio) {
-      // Create a subfolder
+    if (includeAudio && hasText) {
+      // Create a subfolder for both text and audio
       const subfolderId = await createDriveFolder(baseName, folder.id, accessToken);
 
       // Upload text
@@ -365,6 +366,21 @@ export async function saveToDrive(
       );
 
       return textUrl;
+    }
+
+    if (includeAudio) {
+      // Audio only – upload directly into the selected folder
+      const audioBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+      const ext = mimeToExtension(audioMimeType);
+      const audioBlob = new Blob([audioBytes], { type: audioMimeType });
+      const audioUrl = await uploadBlobToDrive(
+        audioBlob,
+        `${baseName}.${ext}`,
+        audioMimeType,
+        folder.id,
+        accessToken,
+      );
+      return audioUrl;
     }
 
     // Text only – upload directly into the selected folder

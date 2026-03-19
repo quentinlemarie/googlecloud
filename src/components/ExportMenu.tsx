@@ -193,7 +193,9 @@ export const ExportMenu = React.memo(function ExportMenu() {
           break;
 
         case 'download': {
-          downloadText(content, `${baseName}.txt`);
+          if (selection.elements.length > 0) {
+            downloadText(content, `${baseName}.txt`);
+          }
           // If audio is included, download it as a separate file
           if (selection.includeAudio && state.rawData.audioBase64 && state.rawData.mimeType) {
             const audioBytes = Uint8Array.from(
