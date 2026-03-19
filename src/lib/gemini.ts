@@ -212,7 +212,14 @@ function extractJSON(text: string): unknown {
   // Strip markdown code fences if present (shouldn't happen with JSON mode,
   // but kept for robustness)
   const cleaned = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    throw new Error(
+      `Failed to parse Gemini JSON response: ${err instanceof Error ? err.message : err}\n` +
+      `Raw text (first 500 chars): ${cleaned.slice(0, 500)}`
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

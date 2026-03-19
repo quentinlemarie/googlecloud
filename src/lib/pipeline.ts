@@ -86,10 +86,7 @@ async function downsampleAudio(
 
     // Convert to base64
     const bytes = new Uint8Array(wavBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]!);
-    }
+    const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('');
     const base64 = btoa(binary);
 
     return { base64, mimeType: 'audio/wav' };
@@ -136,7 +133,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
   // Write PCM samples (float32 → int16)
   let offset = headerSize;
   for (let i = 0; i < samples.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]!));
+    const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
     const int16 = clamped < 0 ? clamped * 0x8000 : clamped * 0x7FFF;
     view.setInt16(offset, int16, true);
     offset += 2;
