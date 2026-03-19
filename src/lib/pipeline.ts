@@ -44,7 +44,115 @@ function startProgressTicker(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Convert a File or Blob to base64
+// Audio downsampling to 16 kHz mono via OfflineAudioContext.
+// Reduces the upload payload by ~4-8× before sending to Gemini.
+// Falls back to the original file when the Web Audio API is unavailable
+// (e.g. during SSR / tests) or when decoding fails.
+// ─────────────────────────────────────────────────────────────────────────────
+const DOWNSAMPLE_RATE = 16_000; // 16 kHz – sufficient for speech recognition
+
+async function downsampleAudio(
+  file: File | Blob,
+): Promise<{ base64: string; mimeType: string }> {
+  // Bail out if Web Audio API is unavailable (SSR / test environment)
+  if (typeof AudioContext === 'undefined' && typeof OfflineAudioContext === 'undefined') {
+    const base64 = await fileToBase64(file);
+    return { base64, mimeType: file.type || 'audio/webm' };
+  }
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+
+    // Decode the uploaded audio into raw PCM samples
+    const audioCtx = new AudioContext();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    await audioCtx.close();
+
+    // Compute the target length at 16 kHz
+    const duration = decoded.duration;
+    const targetLength = Math.ceil(duration * DOWNSAMPLE_RATE);
+
+    // Resample to 16 kHz, 1 channel using OfflineAudioContext
+    const offline = new OfflineAudioContext(1, targetLength, DOWNSAMPLE_RATE);
+    const source = offline.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offline.destination);
+    source.start(0);
+    const rendered = await offline.startRendering();
+
+    // Encode as 16-bit PCM WAV
+    const pcmData = rendered.getChannelData(0);
+    const wavBuffer = encodeWav(pcmData, DOWNSAMPLE_RATE);
+
+    // Convert to base64
+    const bytes = new Uint8Array(wavBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]!);
+    }
+    const base64 = btoa(binary);
+
+    return { base64, mimeType: 'audio/wav' };
+  } catch (err) {
+    // Fallback: send original file if decoding/resampling fails
+    console.warn('Audio downsampling failed, using original file:', err);
+    const base64 = await fileToBase64(file);
+    return { base64, mimeType: file.type || 'audio/webm' };
+  }
+}
+
+/**
+ * Encodes 32-bit float PCM samples as a 16-bit PCM WAV file.
+ */
+function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = samples.length * (bitsPerSample / 8);
+  const headerSize = 44;
+  const buffer = new ArrayBuffer(headerSize + dataSize);
+  const view = new DataView(buffer);
+
+  // RIFF header
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+
+  // fmt sub-chunk
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);           // sub-chunk size
+  view.setUint16(20, 1, true);            // PCM format
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data sub-chunk
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  // Write PCM samples (float32 → int16)
+  let offset = headerSize;
+  for (let i = 0; i < samples.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, samples[i]!));
+    const int16 = clamped < 0 ? clamped * 0x8000 : clamped * 0x7FFF;
+    view.setInt16(offset, int16, true);
+    offset += 2;
+  }
+
+  return buffer;
+}
+
+function writeString(view: DataView, offset: number, str: string): void {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Convert a File or Blob to base64 (raw, no downsampling)
 // ─────────────────────────────────────────────────────────────────────────────
 function fileToBase64(file: File | Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -83,9 +191,10 @@ export async function processAudioFile(
   onError: ErrorCallback
 ): Promise<ProcessAudioResult | null> {
   try {
-    onProgress(30, 'Reading audio file…');
-    const audioBase64 = await fileToBase64(file);
-    const mimeType = file.type || 'audio/webm';
+    onProgress(10, 'Processing audio…');
+    const { base64: audioBase64, mimeType } = await downsampleAudio(file);
+
+    onProgress(30, 'Sending to Gemini…');
 
     // Two-phase progress tracking:
     // Phase 1 (30→48%): slow ticker while Gemini analyses the audio
@@ -144,16 +253,22 @@ export async function processFromDrive(
     if (!selected) return null;
 
     onProgress(8, `Downloading "${selected.name}" from Drive…`);
-    const { data, mimeType } = await downloadDriveFile(selected.id, accessToken);
+    const { data: rawBase64, mimeType: rawMimeType } = await downloadDriveFile(selected.id, accessToken);
+
+    // Downsample to 16 kHz mono for a smaller payload
+    onProgress(10, 'Processing audio…');
+    const rawBytes = Uint8Array.from(atob(rawBase64), (c) => c.charCodeAt(0));
+    const rawBlob = new Blob([rawBytes], { type: rawMimeType });
+    const { base64: audioBase64, mimeType } = await downsampleAudio(rawBlob);
 
     // Two-phase progress tracking:
-    // Phase 1 (10→34%): slow ticker while Gemini analyses the audio
+    // Phase 1 (15→34%): slow ticker while Gemini analyses the audio
     // Phase 2 (34→90%): real progress driven by streaming chunks
     const WAIT_END = 34;
     const STREAM_END = 90;
-    const stopWaitTicker = startProgressTicker(onProgress, 'Analysing audio…', 10, WAIT_END);
+    const stopWaitTicker = startProgressTicker(onProgress, 'Analysing audio…', 15, WAIT_END);
     let receivedFirstChunk = false;
-    let lastReportedProgress = 10;
+    let lastReportedProgress = 15;
 
     const onStreamProgress = (totalChars: number) => {
       if (!receivedFirstChunk) {
@@ -168,7 +283,7 @@ export async function processFromDrive(
       }
     };
 
-    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType, onStreamProgress);
+    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType, onStreamProgress);
     if (!receivedFirstChunk) stopWaitTicker();
 
     if (warnings.length > 0) {
@@ -176,7 +291,7 @@ export async function processFromDrive(
     }
 
     onProgress(95, 'Cleaning up…');
-    return { speakers, transcript, audioBase64: data, mimeType };
+    return { speakers, transcript, audioBase64, mimeType };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);

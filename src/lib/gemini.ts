@@ -82,12 +82,16 @@ async function callGemini(
   prompt: string,
   audioPart?: { inlineData: { mimeType: string; data: string } },
   generationConfig?: GenerationConfig,
+  systemInstruction?: string,
 ): Promise<string> {
   const parts: unknown[] = [{ text: prompt }];
   if (audioPart) parts.push(audioPart);
 
   const body: Record<string, unknown> = { contents: [{ parts }] };
   if (generationConfig) body.generationConfig = generationConfig;
+  if (systemInstruction) {
+    body.system_instruction = { parts: [{ text: systemInstruction }] };
+  }
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
@@ -121,18 +125,24 @@ async function callGeminiStreaming(
   audioPart: { inlineData: { mimeType: string; data: string } },
   generationConfig: GenerationConfig,
   onChunk?: (totalChars: number) => void,
+  systemInstruction?: string,
 ): Promise<string> {
   const parts: unknown[] = [{ text: prompt }, audioPart];
+
+  const body: Record<string, unknown> = {
+    contents: [{ parts }],
+    generationConfig,
+  };
+  if (systemInstruction) {
+    body.system_instruction = { parts: [{ text: systemInstruction }] };
+  }
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig,
-      }),
+      body: JSON.stringify(body),
     }
   );
 
@@ -221,10 +231,15 @@ export async function transcribeAudio(
   mimeType: string,
   onChunk?: (totalChars: number) => void,
 ): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
-  const prompt = `
-You are a professional meeting transcription assistant.
+  const systemInstruction = `You are a professional meeting transcription assistant.
 
-Analyze the provided audio and return a JSON object with the following structure:
+Rules:
+- Use empty strings for unknown names and companies (NEVER use "Unknown", "N/A", etc.)
+- For role: infer seniority and title from context even when not explicitly stated — consider authority level, how others address the speaker, topics they lead, self-introductions, and decision-making patterns; use empty string only if no inference is possible
+- Keep speaker IDs consistent throughout the transcript
+- Timestamps must be accurate to the audio`;
+
+  const prompt = `Analyze the provided audio and return a JSON object with the following structure:
 
 {
   "speakers": [
@@ -232,7 +247,7 @@ Analyze the provided audio and return a JSON object with the following structure
       "id": "speaker_1",
       "label": "Speaker 1",
       "name": "Full name if identifiable, otherwise empty string",
-      "role": "Job title or seniority level. Infer from explicit mentions, how speakers address each other, decision-making authority, topics discussed, and speech patterns (e.g. 'CEO', 'Senior Engineer', 'Director', 'Project Manager', 'Intern'). Use empty string only if truly uninferable.",
+      "role": "Job title or seniority level",
       "company": "Company name if mentioned, otherwise empty string",
       "timestamp": <seconds when this speaker first speaks as a number>
     }
@@ -246,14 +261,7 @@ Analyze the provided audio and return a JSON object with the following structure
       "endTime": <seconds as a number>
     }
   ]
-}
-
-Rules:
-- Use empty strings for unknown names and companies (NEVER use "Unknown", "N/A", etc.)
-- For role: infer seniority and title from context even when not explicitly stated — consider authority level, how others address the speaker, topics they lead, self-introductions, and decision-making patterns; use empty string only if no inference is possible
-- Keep speaker IDs consistent throughout the transcript
-- Timestamps must be accurate to the audio
-`.trim();
+}`;
 
   const audioPart = {
     inlineData: { mimeType, data: audioBase64 },
@@ -265,7 +273,7 @@ Rules:
     temperature: 0,
   };
 
-  const raw = await callGeminiStreaming(prompt, audioPart, generationConfig, onChunk);
+  const raw = await callGeminiStreaming(prompt, audioPart, generationConfig, onChunk, systemInstruction);
   const parsed = extractJSON(raw);
 
   const result = validateAndCleanSpeakers(parsed);
@@ -296,14 +304,15 @@ export async function generateSummaryAndRemarks(
     .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
     .join('\n');
 
-  const prompt = `
-You are an expert meeting analyst. Analyse the transcript below and return a JSON object.
+  const systemInstruction = `You are an expert meeting analyst.
 
 CRITICAL INSTRUCTIONS:
 - Use Markdown bullet points (-) for the items under each section.
 - Do not use hashtags (#).
 - Make it concise and actionable.
-- For behavioural analysis: do not be too nice. Call out flaws, mistakes, and interpersonal dynamics honestly. Analyse tone and communication patterns to enhance your analysis.
+- For behavioural analysis: do not be too nice. Call out flaws, mistakes, and interpersonal dynamics honestly. Analyse tone and communication patterns to enhance your analysis.`;
+
+  const prompt = `Analyse the transcript below and return a JSON object.
 
 Transcript:
 ${formattedTranscript}
@@ -320,8 +329,7 @@ Return a JSON object:
       "remark": "Honest individual behavioural observation covering communication style, tone, strengths, and any flaws or mistakes"
     }
   ]
-}
-`.trim();
+}`;
 
   const generationConfig: GenerationConfig = {
     responseMimeType: 'application/json',
@@ -329,7 +337,7 @@ Return a JSON object:
     temperature: 0,
   };
 
-  const raw = await callGemini(prompt, undefined, generationConfig);
+  const raw = await callGemini(prompt, undefined, generationConfig, systemInstruction);
   const parsed = extractJSON(raw);
   const result = validateSummaryResponse(parsed);
 
