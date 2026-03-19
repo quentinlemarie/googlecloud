@@ -48,7 +48,7 @@ export function repairJSON(text: string): string {
   let inString = false;
   let stringChar = '';
   for (let i = 0; i < s.length; i++) {
-    const ch = s[i]!;
+    const ch = s[i];
     const next = s[i + 1];
 
     if (inString) {
@@ -66,9 +66,9 @@ export function repairJSON(text: string): string {
         stringChar = ch;
         result += ch;
       } else if (ch === '/' && next === '/') {
-        // skip to end of line
+        // consume the rest of the line (the comment)
         while (i < s.length && s[i] !== '\n') i++;
-        // keep the newline so positions stay roughly correct
+        // keep the newline so line structure stays intact
         result += '\n';
       } else {
         result += ch;
@@ -83,7 +83,7 @@ export function repairJSON(text: string): string {
   inString = false;
   stringChar = '';
   for (let i = 0; i < s.length; i++) {
-    const ch = s[i]!;
+    const ch = s[i];
     const next = s[i + 1];
 
     if (inString) {
