@@ -223,13 +223,7 @@ export const ExportMenu = React.memo(function ExportMenu() {
           break;
         }
 
-        case 'notebooklm': {
-          const encoded = encodeURIComponent(content.slice(0, 2000));
-          const url = `https://notebooklm.google.com/?source=${encoded}`;
-          window.open(url, '_blank', 'noopener,noreferrer');
-          dispatch({ type: 'SET_NOTEBOOK_LM_URL', url });
-          break;
-        }
+
       }
     },
     [
@@ -278,12 +272,7 @@ export const ExportMenu = React.memo(function ExportMenu() {
             >
               💾 Save to Drive
             </button>
-            <button
-              onClick={() => openPicker('notebooklm')}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-t border-gray-100"
-            >
-              📓 Open in NotebookLM
-            </button>
+
           </div>
         )}
       </div>

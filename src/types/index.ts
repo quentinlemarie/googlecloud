@@ -61,7 +61,6 @@ export interface Outputs {
   structuredSummary: string;
   behaviouralSummary: string;
   remarks: SpeakerRemark[];
-  notebookLmUrl: string | null;
   cloudStorageUrl: string | null;
 }
 

@@ -5,7 +5,7 @@ import { BRAND_RED } from '../lib/constants';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ExportAction = 'copy' | 'download' | 'drive' | 'notebooklm';
+export type ExportAction = 'copy' | 'download' | 'drive';
 
 export type ExportElement =
   | 'executiveSummary'
@@ -69,14 +69,12 @@ const ACTION_LABELS: Record<ExportAction, string> = {
   copy: 'Copy to Clipboard',
   download: 'Download',
   drive: 'Save to Drive',
-  notebooklm: 'Open in NotebookLM',
 };
 
 const ACTION_ICONS: Record<ExportAction, string> = {
   copy: '📋',
   download: '⬇️',
   drive: '💾',
-  notebooklm: '📓',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
