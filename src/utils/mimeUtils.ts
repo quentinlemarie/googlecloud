@@ -30,5 +30,7 @@ const MIME_TO_EXT: Record<string, string> = {
 };
 
 export function mimeToExtension(mimeType: string): string {
-  return MIME_TO_EXT[mimeType] ?? mimeType.split('/').pop()?.replace('x-', '') ?? 'bin';
+  // Strip codec parameters (e.g. "audio/mp4;codecs=mp4a.40.2" → "audio/mp4")
+  const base = mimeType.split(';')[0];
+  return MIME_TO_EXT[base] ?? base.split('/').pop()?.replace('x-', '') ?? 'bin';
 }
