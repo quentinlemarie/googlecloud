@@ -221,7 +221,7 @@ export async function saveToCloudStorage(
 // Smart file / folder naming
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MEETING_TYPE_KEYWORDS: [string[], string][] = [
+const MEETING_TYPE_PATTERNS: [RegExp[], string][] = [
   [['business review', 'account review', 'quarterly review', 'qbr'], 'Business Review'],
   [['interview', 'candidate', 'hiring', 'recruit'], 'Interview'],
   [['sales', 'pitch', 'demo', 'prospect', 'proposal'], 'Sales Call'],
@@ -233,17 +233,20 @@ const MEETING_TYPE_KEYWORDS: [string[], string][] = [
   [['review', 'performance', 'feedback', 'appraisal'], 'Review'],
   [['kickoff', 'kick-off', 'launch'], 'Kickoff'],
   [['support', 'troubleshoot', 'incident'], 'Support Call'],
-];
+].map(([keywords, label]) => [
+  (keywords as string[]).map((kw) => new RegExp(`\\b${kw}\\b`)),
+  label as string,
+]) as [RegExp[], string][];
 
 /**
- * Uses word-boundary matching to detect the meeting type from summary text.
- * Word boundaries prevent false positives from vendor/company names that
- * happen to contain a keyword as a substring.
+ * Uses pre-compiled word-boundary patterns to detect the meeting type from
+ * summary text. Word boundaries prevent false positives from vendor/company
+ * names that happen to contain a keyword as a substring.
  */
 export function guessMeetingType(text: string): string {
   const lower = text.toLowerCase();
-  for (const [keywords, label] of MEETING_TYPE_KEYWORDS) {
-    if (keywords.some((kw) => new RegExp(`\\b${kw}\\b`).test(lower))) return label;
+  for (const [patterns, label] of MEETING_TYPE_PATTERNS) {
+    if (patterns.some((re) => re.test(lower))) return label;
   }
   return 'Meeting';
 }
@@ -252,19 +255,19 @@ export function guessMeetingType(text: string): string {
  * Role keywords that indicate a speaker belongs to the vendor / service-provider
  * side rather than the client / customer side of the meeting.
  */
-const VENDOR_ROLE_KEYWORDS = [
+const VENDOR_ROLE_PATTERNS: RegExp[] = [
   'instructor', 'trainer', 'facilitator', 'coach',
   'consultant', 'advisor',
   'account manager', 'account executive',
   'customer success',
   'sales rep', 'sales engineer',
   'vendor', 'provider', 'supplier',
-];
+].map((kw) => new RegExp(`\\b${kw}\\b`));
 
 function hasVendorRole(speakers: Speaker[]): boolean {
   return speakers.some((s) => {
     const role = (s.role || '').toLowerCase();
-    return VENDOR_ROLE_KEYWORDS.some((kw) => role.includes(kw));
+    return VENDOR_ROLE_PATTERNS.some((re) => re.test(role));
   });
 }
 
