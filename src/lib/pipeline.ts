@@ -1,7 +1,15 @@
 import type { TranscriptionState, Speaker, TranscriptEntry } from '../types';
 import { transcribeAudio } from './gemini';
 import { generateSummaryAndRemarks } from './gemini';
-import { uploadToCloudStorage, downloadDriveFile, openDrivePicker } from './storage';
+import {
+  uploadToCloudStorage,
+  downloadDriveFile,
+  openDrivePicker,
+  openDriveFolderPicker,
+  uploadToDrive,
+  uploadBlobToDrive,
+  createDriveFolder,
+} from './storage';
 import { requestAccessToken } from './auth';
 import { reportError } from './errorReporting';
 
@@ -204,6 +212,172 @@ export async function saveToCloudStorage(
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);
     await reportError(err, 'saveToCloudStorage');
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Smart file / folder naming
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MEETING_TYPE_KEYWORDS: [string[], string][] = [
+  [['interview', 'candidate', 'hiring', 'recruit'], 'Interview'],
+  [['sales', 'pitch', 'demo', 'prospect', 'proposal'], 'Sales Call'],
+  [['onboarding', 'orientation', 'welcome'], 'Onboarding'],
+  [['standup', 'stand-up', 'sprint', 'scrum', 'retro', 'retrospective'], 'Team Sync'],
+  [['board', 'quarterly', 'earnings', 'investor'], 'Board Meeting'],
+  [['training', 'workshop', 'course'], 'Training'],
+  [['negotiation', 'contract', 'terms'], 'Negotiation'],
+  [['review', 'performance', 'feedback', 'appraisal'], 'Review'],
+  [['kickoff', 'kick-off', 'launch'], 'Kickoff'],
+  [['support', 'troubleshoot', 'incident'], 'Support Call'],
+];
+
+function guessMeetingType(text: string): string {
+  const lower = text.toLowerCase();
+  for (const [keywords, label] of MEETING_TYPE_KEYWORDS) {
+    if (keywords.some((kw) => lower.includes(kw))) return label;
+  }
+  return 'Meeting';
+}
+
+/**
+ * Builds a human-readable base name from speaker metadata and the summary.
+ * Format: `YYYY-MM-DD [Client] [Stakeholder] [Meeting Type]`
+ *
+ * Heuristic: the company represented by fewer speakers is treated as the
+ * "client"; its speaker with the most transcript entries is the main
+ * stakeholder. Falls back gracefully when metadata is sparse.
+ */
+export function buildExportBaseName(
+  speakers: Speaker[],
+  transcript: TranscriptEntry[],
+  summaryText: string,
+): string {
+  const date = new Date().toISOString().slice(0, 10);
+
+  // Group speakers by company (ignore blanks)
+  const byCompany = new Map<string, Speaker[]>();
+  for (const s of speakers) {
+    const co = (s.company || '').trim();
+    if (!co) continue;
+    const arr = byCompany.get(co) ?? [];
+    arr.push(s);
+    byCompany.set(co, arr);
+  }
+
+  let clientName = '';
+  let stakeholderName = '';
+
+  if (byCompany.size >= 2) {
+    // Company with fewest speakers is likely the client
+    const sorted = [...byCompany.entries()].sort((a, b) => a[1].length - b[1].length);
+    clientName = sorted[0][0];
+    const clientSpeakers = sorted[0][1];
+
+    // Pick the stakeholder who spoke most
+    const entryCounts = new Map<string, number>();
+    for (const e of transcript) {
+      entryCounts.set(e.speakerId, (entryCounts.get(e.speakerId) ?? 0) + 1);
+    }
+    clientSpeakers.sort(
+      (a, b) => (entryCounts.get(b.id) ?? 0) - (entryCounts.get(a.id) ?? 0),
+    );
+    stakeholderName = clientSpeakers[0]?.name || clientSpeakers[0]?.label || '';
+  } else if (byCompany.size === 1) {
+    clientName = [...byCompany.keys()][0];
+    // Use the speaker who spoke most as stakeholder
+    const entryCounts = new Map<string, number>();
+    for (const e of transcript) {
+      entryCounts.set(e.speakerId, (entryCounts.get(e.speakerId) ?? 0) + 1);
+    }
+    const sorted = [...speakers].sort(
+      (a, b) => (entryCounts.get(b.id) ?? 0) - (entryCounts.get(a.id) ?? 0),
+    );
+    stakeholderName = sorted[0]?.name || sorted[0]?.label || '';
+  } else {
+    // No company info – use first two speaker names
+    clientName = speakers[0]?.name || speakers[0]?.label || 'Unknown';
+    stakeholderName = speakers[1]?.name || speakers[1]?.label || '';
+  }
+
+  const meetingType = guessMeetingType(summaryText);
+
+  const parts = [date];
+  if (clientName) parts.push(clientName);
+  if (stakeholderName) parts.push(stakeholderName);
+  parts.push(meetingType);
+
+  return parts.join(' ');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Save to Google Drive
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Saves content to Google Drive.
+ * – Authenticates the user
+ * – Opens a folder picker for the destination
+ * – If audio is included, creates a subfolder and uploads both files
+ * – Otherwise uploads a single text file
+ *
+ * Returns the Drive URL of the created file (or folder) or null on cancel.
+ */
+export async function saveToDrive(
+  textContent: string,
+  baseName: string,
+  audioBase64: string | undefined,
+  audioMimeType: string | undefined,
+  onError: ErrorCallback,
+): Promise<string | null> {
+  try {
+    const accessToken = await requestAccessToken();
+
+    const folder = await openDriveFolderPicker(accessToken);
+    if (!folder) return null; // user cancelled
+
+    const includeAudio = !!(audioBase64 && audioMimeType);
+
+    if (includeAudio) {
+      // Create a subfolder
+      const subfolderId = await createDriveFolder(baseName, folder.id, accessToken);
+
+      // Upload text
+      const textUrl = await uploadToDrive(
+        textContent,
+        `${baseName}.txt`,
+        subfolderId,
+        accessToken,
+      );
+
+      // Convert base64 to Blob and upload audio
+      const audioBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+      const ext = audioMimeType.split('/')[1]?.replace('x-', '') || 'webm';
+      const audioBlob = new Blob([audioBytes], { type: audioMimeType });
+      await uploadBlobToDrive(
+        audioBlob,
+        `${baseName}.${ext}`,
+        audioMimeType,
+        subfolderId,
+        accessToken,
+      );
+
+      return textUrl;
+    }
+
+    // Text only – upload directly into the selected folder
+    const url = await uploadToDrive(
+      textContent,
+      `${baseName}.txt`,
+      folder.id,
+      accessToken,
+    );
+    return url;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    onError(message);
+    await reportError(err, 'saveToDrive');
     return null;
   }
 }

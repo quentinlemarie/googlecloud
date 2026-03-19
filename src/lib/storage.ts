@@ -184,6 +184,183 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Drive Upload
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Opens the Google Drive folder picker so the user can choose a destination
+ * folder. Resolves with the folder ID and name, or null if cancelled.
+ */
+export async function openDriveFolderPicker(accessToken: string): Promise<{ id: string; name: string } | null> {
+  await loadGooglePicker();
+
+  return new Promise((resolve, reject) => {
+    const picker_ns = window.google!.picker!;
+
+    const folderView = new picker_ns.DocsView(picker_ns.ViewId.FOLDERS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(picker_ns.DocsViewMode.LIST)
+      .setLabel('Select folder');
+
+    const pickerBuilder = new picker_ns.PickerBuilder()
+      .addView(folderView)
+      .setOAuthToken(accessToken)
+      .setAppId(GOOGLE_APP_ID)
+      .setOrigin(window.location.protocol + '//' + window.location.host)
+      .enableFeature(picker_ns.Feature.SUPPORT_DRIVES)
+      .setTitle('Select destination folder')
+      .setCallback((data: GooglePickerResponse) => {
+        if (data.action === picker_ns.Action.PICKED && data.docs && data.docs.length > 0) {
+          resolve({ id: data.docs[0].id, name: data.docs[0].name });
+        } else if (data.action === picker_ns.Action.CANCEL) {
+          resolve(null);
+        } else if (data.action === picker_ns.Action.ERROR) {
+          reject(new Error('Google Drive Picker encountered an error. Please try again.'));
+        }
+      });
+
+    if (API_KEY) {
+      pickerBuilder.setDeveloperKey(API_KEY);
+    }
+
+    const picker = pickerBuilder.build();
+    picker.setVisible(true);
+  });
+}
+
+/**
+ * Creates a folder in Google Drive and returns its ID.
+ */
+export async function createDriveFolder(
+  name: string,
+  parentId: string | null,
+  accessToken: string,
+): Promise<string> {
+  const metadata: Record<string, unknown> = {
+    name,
+    mimeType: 'application/vnd.google-apps.folder',
+  };
+  if (parentId) {
+    metadata.parents = [parentId];
+  }
+
+  const response = await fetch(
+    'https://www.googleapis.com/drive/v3/files',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(metadata),
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Drive folder creation failed (${response.status}): ${text}`);
+  }
+
+  const result = (await response.json()) as { id: string };
+  return result.id;
+}
+
+/**
+ * Uploads a plain-text file to Google Drive using the multipart upload API.
+ * If `folderId` is provided the file is created inside that folder,
+ * otherwise it lands in the user's My Drive root.
+ *
+ * Returns the web-viewable URL of the created file.
+ */
+export async function uploadToDrive(
+  content: string,
+  filename: string,
+  folderId: string | null,
+  accessToken: string,
+): Promise<string> {
+  const metadata: Record<string, unknown> = {
+    name: filename,
+    mimeType: 'text/plain',
+  };
+  if (folderId) {
+    metadata.parents = [folderId];
+  }
+
+  const form = new FormData();
+  form.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
+  );
+  form.append('file', new Blob([content], { type: 'text/plain' }));
+
+  const response = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Drive upload failed (${response.status}): ${text}`);
+  }
+
+  const result = (await response.json()) as { id: string };
+  return `https://drive.google.com/file/d/${result.id}/view`;
+}
+
+/**
+ * Uploads a binary blob (e.g. audio) to Google Drive.
+ * Returns the web-viewable URL of the created file.
+ */
+export async function uploadBlobToDrive(
+  blob: Blob,
+  filename: string,
+  mimeType: string,
+  folderId: string | null,
+  accessToken: string,
+): Promise<string> {
+  const metadata: Record<string, unknown> = {
+    name: filename,
+    mimeType,
+  };
+  if (folderId) {
+    metadata.parents = [folderId];
+  }
+
+  const form = new FormData();
+  form.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
+  );
+  form.append('file', blob);
+
+  const response = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Drive audio upload failed (${response.status}): ${text}`);
+  }
+
+  const result = (await response.json()) as { id: string };
+  return `https://drive.google.com/file/d/${result.id}/view`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Drive Download
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Downloads a Google Drive file and returns it as a base64-encoded string.
  */

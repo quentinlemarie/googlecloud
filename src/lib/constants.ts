@@ -33,6 +33,7 @@ export const RECORDINGS_PREFIX = 'Recordings/';
 // ─────────────────────────────────────────────────────────────────────────────
 export const SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/devstorage.read_write',
 ].join(' ');
 

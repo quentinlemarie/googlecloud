@@ -42,6 +42,7 @@ export interface GooglePickerDocsView {
   setMimeTypes: (types: string) => GooglePickerDocsView;
   setMode: (mode: string) => GooglePickerDocsView;
   setIncludeFolders: (include: boolean) => GooglePickerDocsView;
+  setSelectFolderEnabled: (enabled: boolean) => GooglePickerDocsView;
   setLabel: (label: string) => GooglePickerDocsView;
   setParent: (folderId: string) => GooglePickerDocsView;
 }
@@ -69,7 +70,7 @@ export interface GoogleNamespace {
     DocsView: new (viewId?: string) => GooglePickerDocsView;
     Action: { PICKED: string; CANCEL: string; ERROR: string };
     DocsViewMode: { LIST: string; GRID: string };
-    ViewId: { DOCS: string };
+    ViewId: { DOCS: string; FOLDERS: string };
     Feature: { SUPPORT_DRIVES: string };
   };
 }
