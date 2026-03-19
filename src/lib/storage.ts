@@ -198,14 +198,24 @@ export async function openDriveFolderPicker(accessToken: string): Promise<{ id: 
   return new Promise((resolve, reject) => {
     const picker_ns = window.google!.picker!;
 
-    const folderView = new picker_ns.DocsView(picker_ns.ViewId.FOLDERS)
+    // Primary tab: browse the actual drive folder structure from root
+    const driveStructureView = new picker_ns.DocsView(picker_ns.ViewId.FOLDERS)
       .setIncludeFolders(true)
       .setSelectFolderEnabled(true)
       .setMode(picker_ns.DocsViewMode.LIST)
-      .setLabel('Select folder');
+      .setParent('root')
+      .setLabel('My Drive');
+
+    // Secondary tab: recent folders for quick access
+    const recentFoldersView = new picker_ns.DocsView(picker_ns.ViewId.FOLDERS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(picker_ns.DocsViewMode.LIST)
+      .setLabel('Recent Folders');
 
     const pickerBuilder = new picker_ns.PickerBuilder()
-      .addView(folderView)
+      .addView(driveStructureView)
+      .addView(recentFoldersView)
       .setOAuthToken(accessToken)
       .setAppId(GOOGLE_APP_ID)
       .setOrigin(window.location.protocol + '//' + window.location.host)
