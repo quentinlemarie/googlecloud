@@ -6,6 +6,8 @@ import type { Speaker, TranscriptEntry } from '../types';
 import { requestAccessToken } from '../lib/auth';
 import { uploadRecordingBlob } from '../lib/storage';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useAudioLevel, SILENCE_THRESHOLD } from '../hooks/useAudioLevel';
+import { AudioLevelIndicator } from './AudioLevelIndicator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pick the best audio encoding supported by this browser.
@@ -33,13 +35,18 @@ export const InputPage = React.memo(function InputPage() {
   const { dispatch } = useTranscription();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
 
+  // Live audio-level (0 – 1) for the visual indicator
+  const audioLevel = useAudioLevel(micStream);
+
   const handleStopAndReset = useCallback(() => {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+    setMicStream(null);
     dispatch({ type: 'RESET' });
     setConfirmTarget(null);
   }, [dispatch]);
@@ -119,6 +126,7 @@ export const InputPage = React.memo(function InputPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
+      setMicStream(stream);
 
       const { mimeType, ext } = chooseMimeType();
       const recorderOptions = mimeType ? { mimeType } : {};
@@ -132,6 +140,7 @@ export const InputPage = React.memo(function InputPage() {
       recorder.onstop = async () => {
         // Release microphone immediately
         stream.getTracks().forEach((t) => t.stop());
+        setMicStream(null);
 
         const blob = new Blob(chunksRef.current, { type: effectiveMime });
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -166,6 +175,7 @@ export const InputPage = React.memo(function InputPage() {
   const handleMicStop = useCallback(() => {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+    setMicStream(null);
   }, []);
 
   return (
@@ -227,12 +237,14 @@ export const InputPage = React.memo(function InputPage() {
             <>
               <button
                 onClick={handleMicStop}
-                className="w-full flex items-center gap-4 bg-red-50 border-2 border-red-400 rounded-xl p-5 shadow-sm animate-pulse"
+                className="w-full flex items-center gap-4 bg-red-50 border-2 border-red-400 rounded-xl p-5 shadow-sm"
               >
-                <span className="text-3xl">⏹️</span>
+                <AudioLevelIndicator level={audioLevel} />
                 <div className="text-left">
                   <div className="font-semibold text-red-600">Recording… click to stop</div>
-                  <div className="text-sm text-red-400">Audio is being captured</div>
+                  <div className="text-sm text-red-400">
+                    {audioLevel > SILENCE_THRESHOLD ? 'Audio is being captured' : 'No audio detected — check your mic'}
+                  </div>
                 </div>
               </button>
 
