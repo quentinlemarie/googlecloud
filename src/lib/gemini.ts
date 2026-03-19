@@ -141,7 +141,11 @@ async function callGeminiStreaming(
     throw new Error(`Gemini API error ${response.status}: ${errorText}`);
   }
 
-  const reader = response.body!.getReader();
+  if (!response.body) {
+    throw new Error('Gemini streaming response has no body');
+  }
+
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let accumulated = '';
   let sseBuffer = '';
@@ -154,7 +158,7 @@ async function callGeminiStreaming(
 
     // Split on double newline (SSE event boundary)
     const events = sseBuffer.split('\n\n');
-    sseBuffer = events.pop()!; // Keep incomplete event in buffer
+    sseBuffer = events.pop() ?? '';
 
     for (const event of events) {
       for (const line of event.split('\n')) {

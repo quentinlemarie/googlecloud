@@ -17,6 +17,11 @@ import { mimeToExtension } from '../utils/mimeUtils';
 export type ProgressCallback = (progress: number, message: string) => void;
 export type ErrorCallback = (message: string) => void;
 
+// Scaling factor for the exponential progress curve during streaming.
+// A typical meeting transcript generates ~20-80 KB of JSON, so 20 000
+// characters puts the midpoint (~63 %) roughly in the middle of that range.
+const STREAM_PROGRESS_CHAR_SCALE = 20_000;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Slowly tick progress forward during a long-running async operation.
 // Uses an asymptotic curve: each tick covers ~12% of the remaining distance,
@@ -97,7 +102,7 @@ export async function processAudioFile(
         stopWaitTicker();
       }
       // Exponential approach: fast initial progress, decelerates near STREAM_END
-      const fraction = 1 - Math.exp(-totalChars / 20_000);
+      const fraction = 1 - Math.exp(-totalChars / STREAM_PROGRESS_CHAR_SCALE);
       const newProgress = Math.round(WAIT_END + (STREAM_END - WAIT_END) * fraction);
       if (newProgress > lastReportedProgress) {
         lastReportedProgress = newProgress;
@@ -155,7 +160,7 @@ export async function processFromDrive(
         receivedFirstChunk = true;
         stopWaitTicker();
       }
-      const fraction = 1 - Math.exp(-totalChars / 20_000);
+      const fraction = 1 - Math.exp(-totalChars / STREAM_PROGRESS_CHAR_SCALE);
       const newProgress = Math.round(WAIT_END + (STREAM_END - WAIT_END) * fraction);
       if (newProgress > lastReportedProgress) {
         lastReportedProgress = newProgress;
