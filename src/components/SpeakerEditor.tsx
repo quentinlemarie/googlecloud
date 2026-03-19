@@ -60,6 +60,7 @@ export const SpeakerEditor = React.memo(function SpeakerEditor({
         ...speakerRef.current,
         name: debouncedName,
         role: debouncedRole,
+        company: speakerRef.current.company,
       },
     });
   }, [dispatch, debouncedName, debouncedRole]);
