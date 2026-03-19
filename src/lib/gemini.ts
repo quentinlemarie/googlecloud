@@ -229,13 +229,13 @@ export async function generateSummaryAndRemarks(
     .join('\n');
 
   const prompt = `
-You are an expert meeting analyst. Analyse the transcript below and return ONLY a JSON object.
+You are an expert meeting analyst. Analyse both the audio for cues and tones and the transcript to return ONLY a JSON object.
 
 CRITICAL INSTRUCTIONS:
 - Use Markdown bullet points (-) for the items under each section.
 - Do not use hashtags (#).
 - Make it concise and actionable.
-- For behavioural analysis: do not be too nice. Call out flaws, mistakes, and interpersonal dynamics honestly. Analyse tone and communication patterns to enhance your analysis.
+- For behavioural analysis: do not be too nice. Call out flaws, mistakes, and interpersonal dynamics honestly, but also what was done well. Analyse tone and communication patterns to enhance your analysis.
 
 Transcript:
 ${formattedTranscript}
@@ -244,12 +244,12 @@ Return ONLY a JSON object (no markdown code fences, no explanation):
 {
   "executiveSummary": "A concise 2-3 sentence overview of what was discussed and decided",
   "structuredSummary": "Structured overview using Markdown bullet points (no hashtags), organised under these plain-text labels:\\nSpeakers & Roles:\\n- ...\\nKey Topics:\\n- ...\\nObstacles / Friction Points:\\n- ...\\nNext Steps / Action Items:\\n- ...",
-  "behaviouralSummary": "Overall group dynamics and interpersonal analysis using Markdown bullet points (no hashtags). Be honest and direct.",
+  "behaviouralSummary": "Overall group dynamics and interpersonal analysis using Markdown bullet points (no hashtags). Do not hesitate to quote names if certain individual behaviour are worth mentionning (not all). Be honest and direct.",
   "remarks": [
     {
       "speakerId": "<id>",
       "speakerName": "<name or empty string>",
-      "remark": "Honest individual behavioural observation covering communication style, tone, strengths, and any flaws or mistakes"
+      "remark": "Honest individual behavioural observation covering communication style, tone, strengths, and any flaws or mistakes or success"
     }
   ]
 }
