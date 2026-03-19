@@ -82,9 +82,31 @@ export async function processAudioFile(
     const audioBase64 = await fileToBase64(file);
     const mimeType = file.type || 'audio/webm';
 
-    const stopTicker = startProgressTicker(onProgress, 'Transcribing and identifying speakers…', 30, 90);
-    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType);
-    stopTicker();
+    // Two-phase progress tracking:
+    // Phase 1 (30→48%): slow ticker while Gemini analyses the audio
+    // Phase 2 (48→90%): real progress driven by streaming chunks
+    const WAIT_END = 48;
+    const STREAM_END = 90;
+    const stopWaitTicker = startProgressTicker(onProgress, 'Analysing audio…', 30, WAIT_END);
+    let receivedFirstChunk = false;
+    let lastReportedProgress = 30;
+
+    const onStreamProgress = (totalChars: number) => {
+      if (!receivedFirstChunk) {
+        receivedFirstChunk = true;
+        stopWaitTicker();
+      }
+      // Exponential approach: fast initial progress, decelerates near STREAM_END
+      const fraction = 1 - Math.exp(-totalChars / 20_000);
+      const newProgress = Math.round(WAIT_END + (STREAM_END - WAIT_END) * fraction);
+      if (newProgress > lastReportedProgress) {
+        lastReportedProgress = newProgress;
+        onProgress(newProgress, 'Transcribing…');
+      }
+    };
+
+    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType, onStreamProgress);
+    if (!receivedFirstChunk) stopWaitTicker();
 
     if (warnings.length > 0) {
       console.warn('Transcription warnings:', warnings);
@@ -119,10 +141,30 @@ export async function processFromDrive(
     onProgress(8, `Downloading "${selected.name}" from Drive…`);
     const { data, mimeType } = await downloadDriveFile(selected.id, accessToken);
 
-    onProgress(10, 'Transcribing…');
-    const stopTicker = startProgressTicker(onProgress, 'Transcribing…', 10, 90);
-    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType);
-    stopTicker();
+    // Two-phase progress tracking:
+    // Phase 1 (10→34%): slow ticker while Gemini analyses the audio
+    // Phase 2 (34→90%): real progress driven by streaming chunks
+    const WAIT_END = 34;
+    const STREAM_END = 90;
+    const stopWaitTicker = startProgressTicker(onProgress, 'Analysing audio…', 10, WAIT_END);
+    let receivedFirstChunk = false;
+    let lastReportedProgress = 10;
+
+    const onStreamProgress = (totalChars: number) => {
+      if (!receivedFirstChunk) {
+        receivedFirstChunk = true;
+        stopWaitTicker();
+      }
+      const fraction = 1 - Math.exp(-totalChars / 20_000);
+      const newProgress = Math.round(WAIT_END + (STREAM_END - WAIT_END) * fraction);
+      if (newProgress > lastReportedProgress) {
+        lastReportedProgress = newProgress;
+        onProgress(newProgress, 'Transcribing…');
+      }
+    };
+
+    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType, onStreamProgress);
+    if (!receivedFirstChunk) stopWaitTicker();
 
     if (warnings.length > 0) {
       console.warn('Transcription warnings:', warnings);
