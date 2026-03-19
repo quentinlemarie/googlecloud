@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="none">
+    <g>
+        <path d="M10 20 Q10 8 20 8 L28 8 Q38 8 38 20 Q38 32 28 32 L20 32 Q10 32 10 20Z" fill="#fe0101" opacity="0.9"/>
+        <text x="24" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="white" text-anchor="middle">ST</text>
+    </g>
+</svg>

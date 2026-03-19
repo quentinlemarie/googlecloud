@@ -8,6 +8,7 @@ import { uploadRecordingBlob } from '../lib/storage';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useAudioLevel, SILENCE_THRESHOLD } from '../hooks/useAudioLevel';
 import { AudioLevelIndicator } from './AudioLevelIndicator';
+import logoSrc from '../assets/Logo.svg';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pick the best audio encoding supported by this browser.
@@ -195,7 +196,10 @@ export const InputPage = React.memo(function InputPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative">
+      {/* Logo – top-right, discreet */}
+      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+
       <div className="w-full max-w-lg">
         {/* Logo / Title */}
         <div className="text-center mb-10">

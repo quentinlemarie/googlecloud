@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { BRAND_RED } from '../lib/constants';
 import { ConfirmDialog } from './ConfirmDialog';
+import logoSrc from '../assets/Logo.svg';
 
 type ConfirmTarget = 'cancel' | 'restart';
 
@@ -35,7 +36,9 @@ export const LoadingPage = React.memo(function LoadingPage() {
       };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative">
+      {/* Logo – top-right, discreet */}
+      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
       <div className="w-full max-w-md text-center">
         <h2 className="text-2xl font-bold mb-2" style={{ color: BRAND_RED }}>
           Processing…
