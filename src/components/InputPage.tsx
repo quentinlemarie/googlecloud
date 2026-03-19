@@ -41,6 +41,8 @@ export const InputPage = React.memo(function InputPage() {
   const micStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   // Live audio-level (0 – 1) for the visual indicator
   const audioLevel = useAudioLevel(micStream);
@@ -106,11 +108,9 @@ export const InputPage = React.memo(function InputPage() {
     }
   }, [startLoading, onProgress, onError, finishLoading, dispatch]);
 
-  // ── Local Upload ──────────────────────────────────────────────────────────
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  // ── Shared file processing (used by file input + drag-and-drop) ─────────
+  const processUploadedFile = useCallback(
+    async (file: File) => {
       startLoading('Uploading file…');
       onProgress(5, `Saving file to Cloud Storage (mtp-storage/Recordings/)…`);
 
@@ -128,6 +128,62 @@ export const InputPage = React.memo(function InputPage() {
       if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
     },
     [startLoading, onProgress, onError, finishLoading]
+  );
+
+  // ── Local Upload ──────────────────────────────────────────────────────────
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      await processUploadedFile(file);
+    },
+    [processUploadedFile]
+  );
+
+  // ── Drag & Drop ───────────────────────────────────────────────────────────
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current = 0;
+      setIsDragging(false);
+
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+
+      // Only accept audio or video files (check MIME type first, fall back to extension)
+      const mediaExtensions = /\.(mp3|wav|m4a|webm|ogg|flac|aac|wma|opus|mp4|mov|avi|mkv|m4v)$/i;
+      if (!file.type.startsWith('audio/') && !file.type.startsWith('video/') && !mediaExtensions.test(file.name)) {
+        onError('Please drop an audio or video file (MP3, WAV, M4A, MP4, MOV…)');
+        return;
+      }
+
+      await processUploadedFile(file);
+    },
+    [processUploadedFile, onError]
   );
 
   // ── Microphone ────────────────────────────────────────────────────────────
@@ -196,9 +252,26 @@ export const InputPage = React.memo(function InputPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative">
+    <div
+      className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Logo – top-right, discreet */}
       <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+
+      {/* Drop-zone overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-red-50/80 backdrop-blur-sm border-4 border-dashed border-red-400 rounded-2xl m-4 pointer-events-none">
+          <div className="text-center">
+            <span className="text-6xl block mb-4">🎵</span>
+            <p className="text-xl font-semibold text-red-600">Drop your audio or video file here</p>
+            <p className="text-sm text-red-400 mt-1">MP3, WAV, M4A, MP4, MOV, WebM…</p>
+          </div>
+        </div>
+      )}
 
       <div className="w-full max-w-lg">
         {/* Logo / Title */}
@@ -218,7 +291,7 @@ export const InputPage = React.memo(function InputPage() {
             <span className="text-3xl">🗂️</span>
             <div className="text-left">
               <div className="font-semibold text-gray-800">Google Drive</div>
-              <div className="text-sm text-gray-500">Pick an audio file from your Drive</div>
+              <div className="text-sm text-gray-500">Pick an audio or video file from your Drive</div>
             </div>
           </button>
 
@@ -230,13 +303,13 @@ export const InputPage = React.memo(function InputPage() {
             <span className="text-3xl">📁</span>
             <div className="text-left">
               <div className="font-semibold text-gray-800">Upload File</div>
-              <div className="text-sm text-gray-500">MP3, WAV, M4A, WebM…</div>
+              <div className="text-sm text-gray-500">MP3, WAV, M4A, MP4, MOV…</div>
             </div>
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/*"
+            accept="audio/*,video/*"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -285,6 +358,11 @@ export const InputPage = React.memo(function InputPage() {
               </div>
             </>
           )}
+
+          {/* Drag-and-drop hint */}
+          <p className="text-center text-xs text-gray-400 pt-2">
+            or drag &amp; drop an audio or video file anywhere on this page
+          </p>
         </div>
       </div>
 
