@@ -5,6 +5,7 @@ import { generateOutputs } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Speaker } from '../types';
+import logoSrc from '../assets/Logo.svg';
 
 interface ReviewPageProps {
   audioBase64?: string;
@@ -71,7 +72,9 @@ export const ReviewPage = React.memo(function ReviewPage({
   }, [state, dispatch]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-6 relative">
+      {/* Logo – top-right, discreet */}
+      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
       <div className="max-w-3xl mx-auto">
         <div className="mb-6 text-center">
           <h2 className="text-2xl font-bold" style={{ color: BRAND_RED }}>

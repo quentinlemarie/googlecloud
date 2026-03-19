@@ -3,6 +3,7 @@ import { useTranscription } from '../context/useTranscription';
 import { ExportMenu } from './ExportMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { BRAND_RED } from '../lib/constants';
+import logoSrc from '../assets/Logo.svg';
 
 export const Header = React.memo(function Header() {
   const { dispatch } = useTranscription();
@@ -26,6 +27,7 @@ export const Header = React.memo(function Header() {
               ↺ Restart
             </button>
             <ExportMenu />
+            <img src={logoSrc} alt="Smart Transcription logo" className="h-7 opacity-70 ml-2" />
           </div>
         </div>
       </header>
