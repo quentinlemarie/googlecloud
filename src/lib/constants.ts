@@ -47,7 +47,7 @@ export const DISCOVERY_DOCS = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Gemini model
 // ─────────────────────────────────────────────────────────────────────────────
-export const GEMINI_MODEL = 'gemini-3.1-pro-preview';
+export const GEMINI_MODEL = 'gemini-2.0-flash';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Speaker colour palette (consistent hashing)

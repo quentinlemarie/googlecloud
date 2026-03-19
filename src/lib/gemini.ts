@@ -16,7 +16,13 @@ async function callGemini(prompt: string, audioPart?: { inlineData: { mimeType: 
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }] }),
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: 'application/json',
+        },
+      }),
     }
   );
 
@@ -183,6 +189,8 @@ Rules:
 - Use empty strings for unknown names and companies (NEVER use "Unknown", "N/A", etc.)
 - For role: infer seniority and title from context even when not explicitly stated — consider authority level, how others address the speaker, topics they lead, self-introductions, and decision-making patterns; use empty string only if no inference is possible
 - Keep speaker IDs consistent throughout the transcript
+- Carefully distinguish speakers by their voice characteristics (pitch, tone, accent, speaking pace). Do NOT merge distinct voices into a single speaker
+- When in doubt about a speaker change, prefer creating a new speaker over incorrectly merging with an existing one
 - Timestamps must be accurate to the audio
 `.trim();
 

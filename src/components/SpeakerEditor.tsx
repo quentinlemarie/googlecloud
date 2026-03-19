@@ -39,11 +39,12 @@ export const SpeakerEditor = React.memo(function SpeakerEditor({
   // Debounced values – only update context after the user pauses typing
   const debouncedName = useDebounce(name, SPEAKER_EDIT_DEBOUNCE_MS);
   const debouncedRole = useDebounce(role, SPEAKER_EDIT_DEBOUNCE_MS);
-  const debouncedCompany = useDebounce(company, SPEAKER_EDIT_DEBOUNCE_MS);
+  // Company is NOT debounced – it only commits on blur / Enter to avoid
+  // re-grouping speaker cards while the user is still typing.
 
   // Track whether any pending changes haven't flushed yet
   const hasPending =
-    name !== debouncedName || role !== debouncedRole || company !== debouncedCompany;
+    name !== debouncedName || role !== debouncedRole || company !== speaker.company;
 
   // Keep a stable ref to the speaker base so the debounce effect always has
   // the latest non-edited fields (id, color, label, timestamp) without
@@ -59,10 +60,9 @@ export const SpeakerEditor = React.memo(function SpeakerEditor({
         ...speakerRef.current,
         name: debouncedName,
         role: debouncedRole,
-        company: debouncedCompany,
       },
     });
-  }, [dispatch, debouncedName, debouncedRole, debouncedCompany]);
+  }, [dispatch, debouncedName, debouncedRole]);
 
   // Immediate commit on blur or Enter
   const commitNow = useCallback(() => {
