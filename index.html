@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Smart Transcription</title>
+
+    <!-- PWA / Add-to-Home-Screen -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#ff0004" />
+    <meta name="description" content="AI-powered meeting transcription and summarisation" />
+
+    <!-- iOS-specific PWA meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Transcription" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Google Identity Services (OAuth 2.0 token flow) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- Google API client library (Drive Picker) -->
