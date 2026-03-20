@@ -1,4 +1,4 @@
-import type { TranscriptionState, Speaker, TranscriptEntry } from '../types';
+import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage } from '../types';
 import { transcribeAudio } from './gemini';
 import { generateSummaryAndRemarks } from './gemini';
 import {
@@ -143,6 +143,7 @@ export async function processFromDrive(
  */
 export async function generateOutputs(
   state: Pick<TranscriptionState, 'edited'>,
+  outputLanguage: OutputLanguage,
   onProgress: ProgressCallback,
   onError: ErrorCallback
 ): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
@@ -151,7 +152,8 @@ export async function generateOutputs(
     const stopTicker = startProgressTicker(onProgress, 'Generating summary…', 5, 95);
     const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
       state.edited.transcript,
-      state.edited.speakers
+      state.edited.speakers,
+      outputLanguage
     );
     stopTicker();
 
