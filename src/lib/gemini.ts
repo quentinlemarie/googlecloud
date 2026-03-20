@@ -149,10 +149,18 @@ function extractJSON(text: string): unknown {
  */
 export async function transcribeAudio(
   audioBase64: string,
-  mimeType: string
+  mimeType: string,
+  outputLanguage: OutputLanguage = 'en'
 ): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
+  const languageInstruction = outputLanguage === 'fr'
+    ? 'Write ALL output in French: transcribe spoken words in French, and write names, roles, and company names in French where applicable.'
+    : 'Write ALL output text in English.';
+
   const prompt = `
 You are a professional meeting transcription assistant.
+
+CRITICAL INSTRUCTIONS:
+- ${languageInstruction}
 
 Analyze the provided audio and return ONLY a JSON object with the following structure
 (no markdown, no explanation, just JSON):
