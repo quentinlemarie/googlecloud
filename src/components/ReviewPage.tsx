@@ -64,6 +64,8 @@ export const ReviewPage = React.memo(function ReviewPage({
         structuredSummary: result.structuredSummary,
         behaviouralSummary: result.behaviouralSummary,
         remarks: result.remarks,
+        chatCacheId: result.chatCacheId,
+        _chatInlineContext: result._chatInlineContext,
       });
       dispatch({
         type: 'SET_PIPELINE',

@@ -4,6 +4,7 @@ import { TranscriptViewer } from './TranscriptViewer';
 import { SpeakerGroup } from './SpeakerGroup';
 import { SpeakerModal } from './SpeakerModal';
 import { Header } from './Header';
+import { ChatBox } from './ChatBox';
 import { BRAND_RED } from '../lib/constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,6 +245,10 @@ export const OutputPage = React.memo(function OutputPage() {
             </a>
           </section>
         )}
+
+        {/* ── Ask about this meeting ──────────────────────────────────── */}
+        <ChatBox />
+
       </main>
 
       <SpeakerModal />

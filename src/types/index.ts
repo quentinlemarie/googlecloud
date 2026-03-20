@@ -62,12 +62,23 @@ export interface Outputs {
   behaviouralSummary: string;
   remarks: SpeakerRemark[];
   cloudStorageUrl: string | null;
+  chatCacheId: string | null;
+  /** Transient – not persisted to localStorage; used as fallback if cache expires */
+  _chatInlineContext?: { prompt: string; rawResponse: string };
 }
 
 export interface SpeakerRemark {
   speakerId: string;
   speakerName: string;
   remark: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat message
+// ─────────────────────────────────────────────────────────────────────────────
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

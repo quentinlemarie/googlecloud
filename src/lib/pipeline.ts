@@ -1,6 +1,7 @@
 import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage, AnalysisMode } from '../types';
 import { transcribeAudio } from './gemini';
-import { generateSummaryAndRemarks } from './gemini';
+import { generateSummaryAndRemarks, createAnalysisCache } from './gemini';
+import { GEMINI_MODELS } from './constants';
 import {
   uploadToCloudStorage,
   downloadDriveFile,
@@ -151,11 +152,11 @@ export async function generateOutputs(
   onProgress: ProgressCallback,
   onError: ErrorCallback,
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
+): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks']; chatCacheId: string | null; _chatInlineContext: { prompt: string; rawResponse: string } } | null> {
   try {
     onProgress(5, 'Generating summary…');
     const stopTicker = startProgressTicker(onProgress, 'Generating summary…', 5, 95);
-    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
+    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings, _cacheContext } = await generateSummaryAndRemarks(
       state.edited.transcript,
       state.edited.speakers,
       outputLanguage,
@@ -168,7 +169,15 @@ export async function generateOutputs(
     }
 
     onProgress(100, 'Done');
-    return { executiveSummary, structuredSummary, behaviouralSummary, remarks };
+
+    // Create a context cache for the chat feature (best-effort; non-blocking)
+    const model = GEMINI_MODELS[analysisMode];
+    const chatCacheId = await createAnalysisCache(_cacheContext, model);
+    if (!chatCacheId) {
+      console.warn('Context cache unavailable; chat will use inline context fallback.');
+    }
+
+    return { executiveSummary, structuredSummary, behaviouralSummary, remarks, chatCacheId, _chatInlineContext: _cacheContext };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);

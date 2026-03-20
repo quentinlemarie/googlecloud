@@ -1,4 +1,4 @@
-import { GEMINI_API_KEY, GEMINI_MODELS } from './constants';
+import { GEMINI_API_KEY, GEMINI_MODELS, CHAT_CACHE_TTL_S } from './constants';
 import { validateAndCleanSpeakers, validateSummaryResponse } from './validation';
 import { validateSpeakerTimestamps } from './audioProcessing';
 import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode } from '../types';
@@ -226,7 +226,7 @@ export async function generateSummaryAndRemarks(
   speakers: Speaker[],
   outputLanguage: OutputLanguage = 'en',
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; warnings: string[] }> {
+): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; warnings: string[]; _cacheContext: { prompt: string; rawResponse: string } }> {
   const speakerMap = Object.fromEntries(speakers.map((s) => [s.id, s.name || s.label]));
   const formattedTranscript = transcript
     .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
@@ -281,5 +281,131 @@ Return ONLY a JSON object (no markdown code fences, no explanation):
     behaviouralSummary: result.data.behaviouralSummary,
     remarks,
     warnings: result.warnings,
+    _cacheContext: { prompt, rawResponse: raw },
   };
+}
+
+/**
+ * Creates a Gemini server-side cache from the analysis conversation.
+ * Returns the cache name (used as chatCacheId) or null if caching fails.
+ */
+export async function createAnalysisCache(
+  cacheContext: { prompt: string; rawResponse: string },
+  model: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: `models/${model}`,
+          contents: [
+            { role: 'user', parts: [{ text: cacheContext.prompt }] },
+            { role: 'model', parts: [{ text: cacheContext.rawResponse }] },
+          ],
+          ttl: `${CHAT_CACHE_TTL_S}s`,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`Gemini cache creation failed (HTTP ${response.status})`);
+      return null;
+    }
+
+    const data = (await response.json()) as { name?: string };
+    return data.name ?? null;
+  } catch (err) {
+    console.warn('Gemini cache creation error:', err);
+    return null;
+  }
+}
+
+/**
+ * Sends a chat message in the context of a previous analysis.
+ * Uses the Gemini context cache when available; falls back to inline context.
+ */
+export async function chatWithAnalysis(
+  userMessage: string,
+  history: { role: 'user' | 'model'; text: string }[],
+  model: string,
+  chatCacheId: string | null,
+  inlineContext: { prompt: string; rawResponse: string } | null
+): Promise<string> {
+  const conversationContents = [
+    ...history.map((m) => ({
+      role: m.role,
+      parts: [{ text: m.text }],
+    })),
+    { role: 'user', parts: [{ text: userMessage }] },
+  ];
+
+  const systemInstruction = {
+    parts: [
+      {
+        text: 'You are a helpful assistant answering questions about a meeting analysis. Be concise, factual, and reference the meeting content when relevant.',
+      },
+    ],
+  };
+
+  if (chatCacheId) {
+    // Use the server-side cached context
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cachedContent: chatCacheId,
+            systemInstruction,
+            contents: conversationContents,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = (await response.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+        };
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        if (text) return text;
+      }
+    } catch {
+      // Fall through to inline context fallback
+    }
+  }
+
+  // Fallback: prepend inline context as the first turn
+  const contents = inlineContext
+    ? [
+        { role: 'user', parts: [{ text: inlineContext.prompt }] },
+        { role: 'model', parts: [{ text: inlineContext.rawResponse }] },
+        ...conversationContents,
+      ]
+    : conversationContents;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction,
+        contents,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
