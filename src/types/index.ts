@@ -71,6 +71,11 @@ export interface SpeakerRemark {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Output language
+// ─────────────────────────────────────────────────────────────────────────────
+export type OutputLanguage = 'en' | 'fr';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // UI state
 // ─────────────────────────────────────────────────────────────────────────────
 export interface UIState {
@@ -79,6 +84,7 @@ export interface UIState {
   exportMenuOpen: boolean;
   transcriptEditMode: boolean;
   errorMessage: string | null;
+  outputLanguage: OutputLanguage;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

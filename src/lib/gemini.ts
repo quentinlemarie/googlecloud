@@ -1,7 +1,7 @@
 import { GEMINI_API_KEY, GEMINI_MODEL } from './constants';
 import { validateAndCleanSpeakers, validateSummaryResponse } from './validation';
 import { validateSpeakerTimestamps } from './audioProcessing';
-import type { Speaker, TranscriptEntry, SpeakerRemark } from '../types';
+import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -213,17 +213,23 @@ Rules:
  */
 export async function generateSummaryAndRemarks(
   transcript: TranscriptEntry[],
-  speakers: Speaker[]
+  speakers: Speaker[],
+  outputLanguage: OutputLanguage = 'en'
 ): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; warnings: string[] }> {
   const speakerMap = Object.fromEntries(speakers.map((s) => [s.id, s.name || s.label]));
   const formattedTranscript = transcript
     .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
     .join('\n');
 
+  const languageInstruction = outputLanguage === 'fr'
+    ? 'Write ALL output text in French.'
+    : 'Write ALL output text in English.';
+
   const prompt = `
 You are an expert meeting analyst. Analyse both the audio for cues and tones and the transcript to return ONLY a JSON object.
 
 CRITICAL INSTRUCTIONS:
+- ${languageInstruction}
 - Use Markdown bullet points (-) for the items under each section.
 - Do not use hashtags (#).
 - Make it concise and actionable.

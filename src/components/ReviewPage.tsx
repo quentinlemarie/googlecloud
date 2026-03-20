@@ -4,7 +4,7 @@ import { SpeakerEditor } from './SpeakerEditor';
 import { generateOutputs } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
 import { ConfirmDialog } from './ConfirmDialog';
-import type { Speaker } from '../types';
+import type { OutputLanguage, Speaker } from '../types';
 import logoSrc from '../assets/Logo.svg';
 
 interface ReviewPageProps {
@@ -18,7 +18,12 @@ export const ReviewPage = React.memo(function ReviewPage({
 }: ReviewPageProps) {
   const { state, dispatch } = useTranscription();
   const speakers = state.edited.speakers;
+  const outputLanguage = state.ui.outputLanguage;
   const [confirmTarget, setConfirmTarget] = useState<'restart' | null>(null);
+
+  const handleLanguageChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    dispatch({ type: 'SET_OUTPUT_LANGUAGE', language: e.target.value as OutputLanguage });
+  }, [dispatch]);
 
   // Group speakers by company; named companies first, empty last (alphabetically sorted)
   const speakersByCompany = useMemo(() => {
@@ -46,6 +51,7 @@ export const ReviewPage = React.memo(function ReviewPage({
 
     const result = await generateOutputs(
       state,
+      outputLanguage,
       (progress, message) => dispatch({ type: 'SET_PROGRESS', progress, message }),
       (message) => {
         dispatch({ type: 'SET_ERROR', message });
@@ -83,6 +89,22 @@ export const ReviewPage = React.memo(function ReviewPage({
           <p className="text-gray-500 text-sm mt-1">
             Fill in speaker details and correct any errors before generating the summary.
           </p>
+        </div>
+
+        {/* Output language selector */}
+        <div className="mb-6 flex items-center justify-center gap-3">
+          <label htmlFor="output-language" className="text-sm font-medium text-gray-600">
+            Output language:
+          </label>
+          <select
+            id="output-language"
+            value={outputLanguage}
+            onChange={handleLanguageChange}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          >
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+          </select>
         </div>
 
         {speakers.length === 0 ? (
