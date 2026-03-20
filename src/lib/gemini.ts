@@ -1,4 +1,4 @@
-import { GEMINI_API_KEY, GEMINI_MODELS } from './constants';
+import { GEMINI_API_KEY, GEMINI_MODELS, CHAT_CACHE_TTL_S } from './constants';
 import { validateAndCleanSpeakers, validateSummaryResponse } from './validation';
 import { validateSpeakerTimestamps } from './audioProcessing';
 import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode, ChatMessage } from '../types';
@@ -323,7 +323,7 @@ export async function createAnalysisCache(
         body: JSON.stringify({
           model: `models/${model}`,
           displayName: 'Meeting analysis context',
-          system_instruction: {
+          systemInstruction: {
             parts: [{
               text: `You are the same expert meeting analyst who just produced the analysis in this conversation. Answer the user's follow-up questions based on the transcript and your own analysis. Stay consistent with your previous findings. Do not hallucinate information not present in the transcript or analysis. ${languageInstruction}`,
             }],
@@ -332,7 +332,7 @@ export async function createAnalysisCache(
             { role: 'user', parts: [{ text: cacheContext.prompt }] },
             { role: 'model', parts: [{ text: cacheContext.rawResponse }] },
           ],
-          ttl: '1800s',
+          ttl: `${CHAT_CACHE_TTL_S}s`,
         }),
       },
     );
@@ -442,7 +442,7 @@ ${formattedRemarks}`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemText }] },
+        systemInstruction: { parts: [{ text: systemText }] },
         contents,
       }),
     },

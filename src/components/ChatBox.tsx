@@ -108,7 +108,7 @@ export const ChatBox = React.memo(function ChatBox() {
           </p>
 
           {/* Messages */}
-          <div className="max-h-80 overflow-y-auto space-y-3 rounded-lg bg-gray-50 p-3">
+          <div className="max-h-80 overflow-y-auto space-y-3 rounded-lg bg-gray-50 p-3" role="log" aria-live="polite">
             {messages.length === 0 && !loading && (
               <p className="text-sm text-gray-400 italic text-center py-4">
                 Ask a question about the meeting analysis…
@@ -156,6 +156,7 @@ export const ChatBox = React.memo(function ChatBox() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your question…"
+              aria-label="Chat message input"
               rows={1}
               className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
               disabled={loading}
