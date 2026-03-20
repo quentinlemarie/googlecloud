@@ -75,7 +75,8 @@ export interface ProcessAudioResult {
 export async function processAudioFile(
   file: File,
   onProgress: ProgressCallback,
-  onError: ErrorCallback
+  onError: ErrorCallback,
+  outputLanguage: OutputLanguage = 'en'
 ): Promise<ProcessAudioResult | null> {
   try {
     onProgress(30, 'Reading audio file…');
@@ -83,7 +84,7 @@ export async function processAudioFile(
     const mimeType = file.type || 'audio/webm';
 
     const stopTicker = startProgressTicker(onProgress, 'Transcribing and identifying speakers…', 30, 90);
-    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType);
+    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType, outputLanguage);
     stopTicker();
 
     if (warnings.length > 0) {
@@ -106,7 +107,8 @@ export async function processAudioFile(
  */
 export async function processFromDrive(
   onProgress: ProgressCallback,
-  onError: ErrorCallback
+  onError: ErrorCallback,
+  outputLanguage: OutputLanguage = 'en'
 ): Promise<ProcessAudioResult | null> {
   try {
     onProgress(2, 'Authenticating with Google…');
@@ -121,7 +123,7 @@ export async function processFromDrive(
 
     onProgress(10, 'Transcribing…');
     const stopTicker = startProgressTicker(onProgress, 'Transcribing…', 10, 90);
-    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType);
+    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType, outputLanguage);
     stopTicker();
 
     if (warnings.length > 0) {
