@@ -45,9 +45,17 @@ export const DISCOVERY_DOCS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Gemini model
+// Gemini models
 // ─────────────────────────────────────────────────────────────────────────────
-export const GEMINI_MODEL = 'gemini-3.1-pro-preview';
+import type { AnalysisMode } from '../types';
+
+export const GEMINI_MODELS: Record<AnalysisMode, string> = {
+  fast: 'gemini-3-flash-preview',
+  deep: 'gemini-3.1-pro-preview',
+};
+
+/** @deprecated Use GEMINI_MODELS[mode] instead */
+export const GEMINI_MODEL = GEMINI_MODELS.deep;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Speaker colour palette (consistent hashing)

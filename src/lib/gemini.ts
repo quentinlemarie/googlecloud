@@ -1,18 +1,18 @@
-import { GEMINI_API_KEY, GEMINI_MODEL } from './constants';
+import { GEMINI_API_KEY, GEMINI_MODELS } from './constants';
 import { validateAndCleanSpeakers, validateSummaryResponse } from './validation';
 import { validateSpeakerTimestamps } from './audioProcessing';
-import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage } from '../types';
+import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function callGemini(prompt: string, audioPart?: { inlineData: { mimeType: string; data: string } }): Promise<string> {
+async function callGemini(model: string, prompt: string, audioPart?: { inlineData: { mimeType: string; data: string } }): Promise<string> {
   const parts: unknown[] = [{ text: prompt }];
   if (audioPart) parts.push(audioPart);
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -150,7 +150,8 @@ function extractJSON(text: string): unknown {
 export async function transcribeAudio(
   audioBase64: string,
   mimeType: string,
-  outputLanguage: OutputLanguage = 'en'
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
 ): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
   const languageInstruction = outputLanguage === 'fr'
     ? 'Write ALL output in French: transcribe spoken words in French, and write names, roles, and company names in French where applicable.'
@@ -198,7 +199,8 @@ Rules:
     inlineData: { mimeType, data: audioBase64 },
   };
 
-  const raw = await callGemini(prompt, audioPart);
+  const model = GEMINI_MODELS[analysisMode];
+  const raw = await callGemini(model, prompt, audioPart);
   const parsed = extractJSON(raw);
 
   const result = validateAndCleanSpeakers(parsed);
@@ -222,7 +224,8 @@ Rules:
 export async function generateSummaryAndRemarks(
   transcript: TranscriptEntry[],
   speakers: Speaker[],
-  outputLanguage: OutputLanguage = 'en'
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
 ): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; warnings: string[] }> {
   const speakerMap = Object.fromEntries(speakers.map((s) => [s.id, s.name || s.label]));
   const formattedTranscript = transcript
@@ -261,7 +264,8 @@ Return ONLY a JSON object (no markdown code fences, no explanation):
 }
 `.trim();
 
-  const raw = await callGemini(prompt);
+  const model = GEMINI_MODELS[analysisMode];
+  const raw = await callGemini(model, prompt);
   const parsed = extractJSON(raw);
   const result = validateSummaryResponse(parsed);
 

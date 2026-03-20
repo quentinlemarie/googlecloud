@@ -76,6 +76,11 @@ export interface SpeakerRemark {
 export type OutputLanguage = 'en' | 'fr';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Analysis mode
+// ─────────────────────────────────────────────────────────────────────────────
+export type AnalysisMode = 'fast' | 'deep';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // UI state
 // ─────────────────────────────────────────────────────────────────────────────
 export interface UIState {
@@ -85,6 +90,7 @@ export interface UIState {
   transcriptEditMode: boolean;
   errorMessage: string | null;
   outputLanguage: OutputLanguage;
+  analysisMode: AnalysisMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

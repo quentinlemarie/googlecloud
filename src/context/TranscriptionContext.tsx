@@ -7,6 +7,7 @@ import type {
   TranscriptEntry,
   SpeakerRemark,
   OutputLanguage,
+  AnalysisMode,
 } from '../types';
 import { LS_STATE_KEY, APP_BUILD_TIME } from '../lib/constants';
 
@@ -32,6 +33,7 @@ export type TranscriptionAction =
   | { type: 'SET_EXPORT_MENU_OPEN'; open: boolean }
   | { type: 'SET_TRANSCRIPT_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_OUTPUT_LANGUAGE'; language: OutputLanguage }
+  | { type: 'SET_ANALYSIS_MODE'; mode: AnalysisMode }
   | { type: 'REASSIGN_SPEAKER'; entryId: string; newSpeakerId: string }
   | { type: 'REASSIGN_SPEAKER_ALL'; oldSpeakerId: string; newSpeakerId: string }
   | { type: 'RESET' };
@@ -69,6 +71,7 @@ const initialState: TranscriptionState = {
     transcriptEditMode: false,
     errorMessage: null,
     outputLanguage: 'en',
+    analysisMode: 'deep',
   },
 };
 
@@ -189,6 +192,9 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
 
     case 'SET_OUTPUT_LANGUAGE':
       return { ...state, ui: { ...state.ui, outputLanguage: action.language } };
+
+    case 'SET_ANALYSIS_MODE':
+      return { ...state, ui: { ...state.ui, analysisMode: action.mode } };
 
     case 'REASSIGN_SPEAKER': {
       const updatedTranscript = state.edited.transcript.map((e) =>

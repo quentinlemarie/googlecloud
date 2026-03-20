@@ -19,6 +19,7 @@ export const ReviewPage = React.memo(function ReviewPage({
   const { state, dispatch } = useTranscription();
   const speakers = state.edited.speakers;
   const outputLanguage = state.ui.outputLanguage;
+  const analysisMode = state.ui.analysisMode;
   const [confirmTarget, setConfirmTarget] = useState<'restart' | null>(null);
 
   // Group speakers by company; named companies first, empty last (alphabetically sorted)
@@ -52,7 +53,8 @@ export const ReviewPage = React.memo(function ReviewPage({
       (message) => {
         dispatch({ type: 'SET_ERROR', message });
         dispatch({ type: 'SET_STAGE', stage: 'REVIEW' });
-      }
+      },
+      analysisMode
     );
 
     if (result) {
