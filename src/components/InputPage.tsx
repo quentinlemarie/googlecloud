@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { processAudioFile, processFromDrive } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
-import type { OutputLanguage, Speaker, TranscriptEntry } from '../types';
+import type { OutputLanguage, Speaker, TranscriptEntry, AnalysisMode } from '../types';
 import { requestAccessToken } from '../lib/auth';
 import { uploadRecordingBlob } from '../lib/storage';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -35,6 +35,7 @@ function chooseMimeType(): { mimeType: string; ext: string } {
 export const InputPage = React.memo(function InputPage() {
   const { state, dispatch } = useTranscription();
   const outputLanguage = state.ui.outputLanguage;
+  const analysisMode = state.ui.analysisMode;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
@@ -97,11 +98,15 @@ export const InputPage = React.memo(function InputPage() {
     dispatch({ type: 'SET_OUTPUT_LANGUAGE', language: e.target.value as OutputLanguage });
   }, [dispatch]);
 
+  const handleAnalysisModeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    dispatch({ type: 'SET_ANALYSIS_MODE', mode: e.target.value as AnalysisMode });
+  }, [dispatch]);
+
   // ── Google Drive ──────────────────────────────────────────────────────────
   const handleDrive = useCallback(async () => {
     startLoading('Connecting to Google Drive…');
     try {
-      const result = await processFromDrive(onProgress, onError, outputLanguage);
+      const result = await processFromDrive(onProgress, onError, outputLanguage, analysisMode);
       if (result) {
         finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
       } else {
@@ -111,7 +116,7 @@ export const InputPage = React.memo(function InputPage() {
     } catch (err) {
       onError(err instanceof Error ? err.message : 'An unexpected error occurred');
     }
-  }, [startLoading, onProgress, onError, finishLoading, dispatch, outputLanguage]);
+  }, [startLoading, onProgress, onError, finishLoading, dispatch, outputLanguage, analysisMode]);
 
   // ── Shared file processing (used by file input + drag-and-drop) ─────────
   const processUploadedFile = useCallback(
@@ -129,10 +134,10 @@ export const InputPage = React.memo(function InputPage() {
         onProgress(25, 'Transcribing…');
       }
 
-      const result = await processAudioFile(file, onProgress, onError, outputLanguage);
+      const result = await processAudioFile(file, onProgress, onError, outputLanguage, analysisMode);
       if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
     },
-    [startLoading, onProgress, onError, finishLoading, outputLanguage]
+    [startLoading, onProgress, onError, finishLoading, outputLanguage, analysisMode]
   );
 
   // ── Local Upload ──────────────────────────────────────────────────────────
@@ -231,7 +236,7 @@ export const InputPage = React.memo(function InputPage() {
         }
 
         const file = new File([blob], filename, { type: effectiveMime });
-        const result = await processAudioFile(file, onProgress, onError, outputLanguage);
+        const result = await processAudioFile(file, onProgress, onError, outputLanguage, analysisMode);
         if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
       };
 
@@ -241,7 +246,7 @@ export const InputPage = React.memo(function InputPage() {
     } catch {
       onError('Microphone access denied. Please allow microphone access and try again.');
     }
-  }, [startLoading, onProgress, onError, finishLoading, outputLanguage]);
+  }, [startLoading, onProgress, onError, finishLoading, outputLanguage, analysisMode]);
 
   const handleMicStop = useCallback(() => {
     mediaRecorderRef.current?.stop();
@@ -288,19 +293,36 @@ export const InputPage = React.memo(function InputPage() {
         </div>
 
         {/* Output language selector */}
-        <div className="mb-6 flex items-center justify-center gap-3">
-          <label htmlFor="output-language" className="text-sm font-medium text-gray-600">
-            Output language:
-          </label>
-          <select
-            id="output-language"
-            value={outputLanguage}
-            onChange={handleLanguageChange}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-          >
-            <option value="en">English</option>
-            <option value="fr">Français</option>
-          </select>
+        <div className="mb-6 flex items-center justify-center gap-6 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label htmlFor="output-language" className="text-sm font-medium text-gray-600">
+              Output language:
+            </label>
+            <select
+              id="output-language"
+              value={outputLanguage}
+              onChange={handleLanguageChange}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            >
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="analysis-mode" className="text-sm font-medium text-gray-600">
+              Analysis:
+            </label>
+            <select
+              id="analysis-mode"
+              value={analysisMode}
+              onChange={handleAnalysisModeChange}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            >
+              <option value="fast">⚡ Fast</option>
+              <option value="deep">🔬 Deep</option>
+            </select>
+          </div>
         </div>
 
         <div className="space-y-4">

@@ -1,4 +1,4 @@
-import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage } from '../types';
+import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage, AnalysisMode } from '../types';
 import { transcribeAudio } from './gemini';
 import { generateSummaryAndRemarks } from './gemini';
 import {
@@ -76,7 +76,8 @@ export async function processAudioFile(
   file: File,
   onProgress: ProgressCallback,
   onError: ErrorCallback,
-  outputLanguage: OutputLanguage = 'en'
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
 ): Promise<ProcessAudioResult | null> {
   try {
     onProgress(30, 'Reading audio file…');
@@ -84,7 +85,7 @@ export async function processAudioFile(
     const mimeType = file.type || 'audio/webm';
 
     const stopTicker = startProgressTicker(onProgress, 'Transcribing and identifying speakers…', 30, 90);
-    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType, outputLanguage);
+    const { speakers, transcript, warnings } = await transcribeAudio(audioBase64, mimeType, outputLanguage, analysisMode);
     stopTicker();
 
     if (warnings.length > 0) {
@@ -108,7 +109,8 @@ export async function processAudioFile(
 export async function processFromDrive(
   onProgress: ProgressCallback,
   onError: ErrorCallback,
-  outputLanguage: OutputLanguage = 'en'
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
 ): Promise<ProcessAudioResult | null> {
   try {
     onProgress(2, 'Authenticating with Google…');
@@ -123,7 +125,7 @@ export async function processFromDrive(
 
     onProgress(10, 'Transcribing…');
     const stopTicker = startProgressTicker(onProgress, 'Transcribing…', 10, 90);
-    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType, outputLanguage);
+    const { speakers, transcript, warnings } = await transcribeAudio(data, mimeType, outputLanguage, analysisMode);
     stopTicker();
 
     if (warnings.length > 0) {
@@ -147,7 +149,8 @@ export async function generateOutputs(
   state: Pick<TranscriptionState, 'edited'>,
   outputLanguage: OutputLanguage,
   onProgress: ProgressCallback,
-  onError: ErrorCallback
+  onError: ErrorCallback,
+  analysisMode: AnalysisMode = 'deep'
 ): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
   try {
     onProgress(5, 'Generating summary…');
@@ -155,7 +158,8 @@ export async function generateOutputs(
     const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
       state.edited.transcript,
       state.edited.speakers,
-      outputLanguage
+      outputLanguage,
+      analysisMode
     );
     stopTicker();
 
