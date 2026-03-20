@@ -2,11 +2,66 @@ import type { Speaker, TranscriptEntry, ValidationResult } from '../types';
 import { TIMESTAMP_MISMATCH_THRESHOLD_S } from './constants';
 
 /**
+ * Finds the longest contiguous turn (run of consecutive entries in time-order)
+ * for a given speaker. A "turn" is a sequence of entries where no other speaker
+ * talks in between, giving a clean single-speaker segment.
+ *
+ * Returns the start and end times, or null if the speaker has no entries.
+ */
+export function findLongestTurn(
+  speakerId: string,
+  transcript: TranscriptEntry[]
+): { startTime: number; endTime: number } | null {
+  if (transcript.length === 0) return null;
+
+  const sorted = [...transcript].sort((a, b) => a.startTime - b.startTime);
+
+  let bestStart = -1;
+  let bestEnd = -1;
+  let bestDuration = -1;
+
+  let turnStart = -1;
+  let turnEnd = -1;
+
+  for (const entry of sorted) {
+    if (entry.speakerId === speakerId) {
+      if (turnStart < 0) {
+        turnStart = entry.startTime;
+      }
+      turnEnd = entry.endTime;
+    } else {
+      if (turnStart >= 0) {
+        const duration = turnEnd - turnStart;
+        if (duration > bestDuration) {
+          bestStart = turnStart;
+          bestEnd = turnEnd;
+          bestDuration = duration;
+        }
+        turnStart = -1;
+        turnEnd = -1;
+      }
+    }
+  }
+
+  // Handle the last run
+  if (turnStart >= 0) {
+    const duration = turnEnd - turnStart;
+    if (duration > bestDuration) {
+      bestStart = turnStart;
+      bestEnd = turnEnd;
+    }
+  }
+
+  if (bestStart < 0) return null;
+  return { startTime: bestStart, endTime: bestEnd };
+}
+
+/**
  * Validates speaker timestamps against the transcript.
  * - Detects out-of-bounds timestamps (> last transcript entry end time)
  * - Detects Gemini hallucinations (timestamp differs from transcript by > threshold)
- * - Corrects timestamps to the actual first utterance of each speaker
- * - Calculates playback duration based on the next speaker's start time
+ * - Always corrects timestamps to the start of the longest contiguous turn
+ *   for each speaker, ensuring the sample plays a distinguishable solo segment
  *
  * Returns validated speakers and a confidence score.
  */
@@ -23,23 +78,15 @@ export function validateSpeakerTimestamps(
 
   const lastEndTime = Math.max(...transcript.map((e) => e.endTime));
 
-  // Build a map: speakerId → first actual transcript entry
-  const firstEntryBySpeaker = new Map<string, TranscriptEntry>();
-  for (const entry of transcript) {
-    if (!firstEntryBySpeaker.has(entry.speakerId)) {
-      firstEntryBySpeaker.set(entry.speakerId, entry);
-    }
-  }
-
   const corrected = speakers.map((speaker): Speaker => {
-    const firstEntry = firstEntryBySpeaker.get(speaker.id);
+    const bestTurn = findLongestTurn(speaker.id, transcript);
 
-    if (!firstEntry) {
+    if (!bestTurn) {
       // Speaker not found in transcript – keep as-is
       return speaker;
     }
 
-    const actualStart = firstEntry.startTime;
+    const bestStart = bestTurn.startTime;
     const claimedTimestamp = speaker.timestamp;
 
     // Check for out-of-bounds
@@ -48,20 +95,19 @@ export function validateSpeakerTimestamps(
         `Speaker "${speaker.id}" timestamp ${claimedTimestamp}s is out of bounds (audio ends at ${lastEndTime}s). Correcting.`
       );
       confidence -= 0.1;
-      return { ...speaker, timestamp: actualStart };
+    } else {
+      // Check for significant mismatch (possible hallucination)
+      const diff = Math.abs(claimedTimestamp - bestStart);
+      if (diff > TIMESTAMP_MISMATCH_THRESHOLD_S) {
+        warnings.push(
+          `Speaker "${speaker.id}" timestamp ${claimedTimestamp}s differs from best transcript segment by ${diff.toFixed(1)}s. Correcting.`
+        );
+        confidence -= 0.05;
+      }
     }
 
-    // Check for significant mismatch (possible hallucination)
-    const diff = Math.abs(claimedTimestamp - actualStart);
-    if (diff > TIMESTAMP_MISMATCH_THRESHOLD_S) {
-      warnings.push(
-        `Speaker "${speaker.id}" timestamp ${claimedTimestamp}s differs from first transcript entry by ${diff.toFixed(1)}s. Correcting.`
-      );
-      confidence -= 0.05;
-      return { ...speaker, timestamp: actualStart };
-    }
-
-    return speaker;
+    // Always use the transcript-derived best sample start
+    return { ...speaker, timestamp: bestStart };
   });
 
   return {
@@ -73,35 +119,20 @@ export function validateSpeakerTimestamps(
 
 /**
  * Calculates the playback duration for a speaker audio sample.
- * Uses the gap to the next speaker's start time so the snippet
- * plays the speaker's complete turn rather than a fixed window.
+ * Uses the longest contiguous turn so the snippet plays a clean,
+ * distinguishable single-speaker segment rather than a fixed window.
  *
  * @param speakerId  Speaker whose sample we want
  * @param transcript Full transcript
- * @param fallback   Duration to use when no gap can be calculated (default 10s)
+ * @param fallback   Duration to use when no turn can be found (default 10s)
  */
 export function getSamplePlaybackDuration(
   speakerId: string,
   transcript: TranscriptEntry[],
   fallback = 10
 ): number {
-  const entries = transcript.filter((e) => e.speakerId === speakerId);
-  if (entries.length === 0) return fallback;
+  const bestTurn = findLongestTurn(speakerId, transcript);
+  if (!bestTurn) return fallback;
 
-  const firstEntry = entries[0]!;
-  const startTime = firstEntry.startTime;
-
-  // Find the first entry belonging to a DIFFERENT speaker after this one
-  const sortedAll = [...transcript].sort((a, b) => a.startTime - b.startTime);
-  const nextOtherEntry = sortedAll.find(
-    (e) => e.speakerId !== speakerId && e.startTime >= startTime
-  );
-
-  if (!nextOtherEntry) {
-    // Last speaker – use their final endTime
-    const lastEntry = entries[entries.length - 1]!;
-    return Math.max(fallback, lastEntry.endTime - startTime);
-  }
-
-  return Math.max(1, nextOtherEntry.startTime - startTime);
+  return Math.max(1, bestTurn.endTime - bestTurn.startTime);
 }
