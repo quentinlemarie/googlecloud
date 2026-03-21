@@ -4,6 +4,7 @@ import { TranscriptViewer } from './TranscriptViewer';
 import { SpeakerGroup } from './SpeakerGroup';
 import { SpeakerModal } from './SpeakerModal';
 import { Header } from './Header';
+import { ChatBox } from './ChatBox';
 import { BRAND_RED } from '../lib/constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,6 +230,9 @@ export const OutputPage = React.memo(function OutputPage() {
             </div>
           </Collapsible>
         </div>
+
+        {/* ── 4. Chat ────────────────────────────────────────────────── */}
+        <ChatBox />
 
         {/* Cloud Storage link */}
         {state.outputs.cloudStorageUrl && (

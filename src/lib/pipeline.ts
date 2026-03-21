@@ -1,6 +1,6 @@
 import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage, AnalysisMode } from '../types';
 import { transcribeAudio } from './gemini';
-import { generateSummaryAndRemarks } from './gemini';
+import { generateSummaryAndRemarks, createAnalysisCache } from './gemini';
 import {
   uploadToCloudStorage,
   downloadDriveFile,
@@ -151,11 +151,11 @@ export async function generateOutputs(
   onProgress: ProgressCallback,
   onError: ErrorCallback,
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
+): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks']; chatCacheId: string | null } | null> {
   try {
     onProgress(5, 'Generating summary…');
     const stopTicker = startProgressTicker(onProgress, 'Generating summary…', 5, 95);
-    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
+    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings, _cacheContext } = await generateSummaryAndRemarks(
       state.edited.transcript,
       state.edited.speakers,
       outputLanguage,
@@ -167,8 +167,13 @@ export async function generateOutputs(
       console.warn('Summary warnings:', warnings);
     }
 
+    // Create a Gemini context cache so follow-up chat reuses the same
+    // analysis conversation without resending all tokens.
+    onProgress(97, 'Preparing chat context…');
+    const chatCacheId = await createAnalysisCache(_cacheContext, outputLanguage);
+
     onProgress(100, 'Done');
-    return { executiveSummary, structuredSummary, behaviouralSummary, remarks };
+    return { executiveSummary, structuredSummary, behaviouralSummary, remarks, chatCacheId };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);

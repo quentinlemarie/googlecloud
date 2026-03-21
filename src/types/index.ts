@@ -62,6 +62,8 @@ export interface Outputs {
   behaviouralSummary: string;
   remarks: SpeakerRemark[];
   cloudStorageUrl: string | null;
+  /** Gemini context cache name for follow-up chat (e.g. `cachedContents/…`) */
+  chatCacheId: string | null;
 }
 
 export interface SpeakerRemark {
@@ -107,6 +109,14 @@ export interface TranscriptionState {
   edited: EditedData;
   outputs: Outputs;
   ui: UIState;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat
+// ─────────────────────────────────────────────────────────────────────────────
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

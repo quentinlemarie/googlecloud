@@ -84,6 +84,11 @@ export const BRAND_RED = '#fe0101';
 export const SPEAKER_EDIT_DEBOUNCE_MS = 800;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Gemini context cache
+// ─────────────────────────────────────────────────────────────────────────────
+export const CHAT_CACHE_TTL_S = 1800; // 30 minutes
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Timestamp validation
 // ─────────────────────────────────────────────────────────────────────────────
 export const TIMESTAMP_MISMATCH_THRESHOLD_S = 3; // > 3s mismatch = hallucination
