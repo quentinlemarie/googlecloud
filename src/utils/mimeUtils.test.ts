@@ -6,6 +6,7 @@ describe('mimeToExtension', () => {
     expect(mimeToExtension('audio/mp4')).toBe('m4a');
     expect(mimeToExtension('audio/mpeg')).toBe('mp3');
     expect(mimeToExtension('video/mp4')).toBe('mp4');
+    expect(mimeToExtension('audio/x-caf')).toBe('caf');
   });
 
   it('strips codec parameters before lookup', () => {

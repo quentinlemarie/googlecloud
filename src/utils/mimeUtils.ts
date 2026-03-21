@@ -15,6 +15,7 @@ const MIME_TO_EXT: Record<string, string> = {
   'audio/flac': 'flac',
   'audio/aac': 'aac',
   'audio/x-aac': 'aac',
+  'audio/x-caf': 'caf',
   // Video
   'video/mp4': 'mp4',
   'video/mpeg': 'mpeg',

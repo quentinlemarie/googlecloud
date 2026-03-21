@@ -32,7 +32,7 @@
       "files": [
         {
           "name": "audio",
-          "accept": ["audio/*", "video/*", ".m4a", ".mp3", ".wav", ".mp4", ".mov", ".webm", ".ogg", ".aac"]
+          "accept": ["audio/*", "video/*", ".m4a", ".mp3", ".wav", ".mp4", ".mov", ".webm", ".ogg", ".aac", ".flac", ".caf"]
         }
       ]
     }
