@@ -9,8 +9,8 @@ steps:
           --build-arg VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID \
           --build-arg VITE_GOOGLE_APP_ID=$_VITE_GOOGLE_APP_ID \
           --build-arg VITE_GCP_PROJECT_ID=$_VITE_GCP_PROJECT_ID \
-          --build-arg VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY \
-          --build-arg VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY \
+          --build-arg "VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY" \
+          --build-arg "VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY" \
           --build-arg VITE_GCS_BUCKET=$_VITE_GCS_BUCKET \
           --build-arg VITE_REC_FOLDER_ID=$_VITE_REC_FOLDER_ID \
           -t $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA \
