@@ -11,6 +11,9 @@
 
 const CACHE_NAME = 'smart-transcription-v1';
 
+// Dedicated cache for files received via the Web Share Target API.
+const SHARE_CACHE = 'share-target-audio';
+
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -31,11 +34,13 @@ self.addEventListener('install', (event) => {
 
 // ── Activate ─────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
-  // Remove old caches from previous versions.
+  // Remove old caches from previous versions, but keep the share-target cache.
   event.waitUntil(
     caches.keys().then((names) =>
       Promise.all(
-        names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))
+        names
+          .filter((n) => n !== CACHE_NAME && n !== SHARE_CACHE)
+          .map((n) => caches.delete(n))
       )
     )
   );
@@ -43,10 +48,44 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ── Fetch ────────────────────────────────────────────────────────────────────
+// ── Share Target (Web Share Target API) ──────────────────────────────────────
+// When the PWA receives a shared file (e.g. from iPhone Voice Memos), the OS
+// sends a POST to /share-target.  We stash the first audio/video file in a
+// dedicated cache so the app can pick it up on the next page load.
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // ── Handle incoming share-target POST ──────────────────────────────────
+  if (url.pathname === '/share-target' && request.method === 'POST') {
+    event.respondWith(
+      (async () => {
+        try {
+          const formData = await request.formData();
+          const file = formData.get('audio');
+          if (file && file instanceof File && file.size > 0) {
+            // Store the shared file in a dedicated cache keyed by a fixed URL.
+            const cache = await caches.open(SHARE_CACHE);
+            await cache.put(
+              '/shared-audio-file',
+              new Response(file, {
+                headers: {
+                  'Content-Type': file.type || 'audio/mp4',
+                  'X-Shared-Filename': encodeURIComponent(file.name),
+                },
+              })
+            );
+          }
+        } catch (err) {
+          console.warn('Share target: failed to cache shared file', err);
+        }
+        // Always redirect to the app root so the SPA boots normally.
+        return Response.redirect('/', 303);
+      })()
+    );
+    return;
+  }
 
   // Never cache cross-origin Google API / auth requests.
   const bypassOrigins = new Set([

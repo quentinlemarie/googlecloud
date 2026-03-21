@@ -261,6 +261,35 @@ export const InputPage = React.memo(function InputPage() {
     };
   }, []);
 
+  // ── Web Share Target: pick up audio shared from another app (e.g. iPhone Voice Memos)
+  useEffect(() => {
+    const SHARE_CACHE = 'share-target-audio';
+    const SHARE_KEY = '/shared-audio-file';
+
+    (async () => {
+      try {
+        const cache = await caches.open(SHARE_CACHE);
+        const response = await cache.match(SHARE_KEY);
+        if (!response) return;
+
+        // Remove the cached entry immediately so it isn't replayed on next visit.
+        await cache.delete(SHARE_KEY);
+
+        const blob = await response.blob();
+        if (!blob || blob.size === 0) return;
+
+        const rawName = response.headers.get('X-Shared-Filename');
+        const filename = rawName ? decodeURIComponent(rawName) : 'shared-audio.m4a';
+        const mime = blob.type || 'audio/mp4';
+
+        const file = new File([blob], filename, { type: mime });
+        await processUploadedFile(file);
+      } catch (err) {
+        console.warn('Share target: failed to retrieve shared file', err);
+      }
+    })();
+  }, [processUploadedFile]);
+
   return (
     <div
       className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative"
