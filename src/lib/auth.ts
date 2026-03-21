@@ -74,10 +74,16 @@ export async function requestAccessToken(): Promise<string> {
       return;
     }
 
-    // Build the client first so we can assign the callback synchronously
+    // Build the client first so we can assign the callback synchronously.
+    // ux_mode: 'popup' is required to prevent GIS from falling back to the
+    // redirect flow in environments where popups are restricted (e.g. some
+    // mobile browsers).  Without this the OAuth handshake uses a full-page
+    // redirect and Google returns "Error 400: redirect_uri_mismatch" because
+    // no redirect URI is registered for this app.
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
+      ux_mode: 'popup',
       // Placeholder – replaced immediately below before any request fires
       callback: () => {},
     });
