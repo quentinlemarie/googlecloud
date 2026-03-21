@@ -368,6 +368,82 @@ export async function uploadBlobToDrive(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cloud Storage – Recordings listing & download
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RecordingItem {
+  /** Full GCS object name, e.g. "Recordings/recording-2024-01-15T14-30-45-123Z.m4a" */
+  name: string;
+  /** Display-friendly filename without the prefix */
+  displayName: string;
+  /** MIME type reported by GCS */
+  contentType: string;
+  /** Size in bytes */
+  size: number;
+  /** ISO 8601 timestamp of when the object was created */
+  timeCreated: string;
+}
+
+/**
+ * Lists all objects stored under `Recordings/` in the recordings bucket.
+ * Returns an array sorted by creation time (newest first).
+ */
+export async function listRecordings(accessToken: string): Promise<RecordingItem[]> {
+  const url =
+    `https://storage.googleapis.com/storage/v1/b/${RECORDINGS_BUCKET}/o` +
+    `?prefix=${encodeURIComponent(RECORDINGS_PREFIX)}&fields=items(name,contentType,size,timeCreated)`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to list recordings (${response.status}): ${text}`);
+  }
+
+  const json = (await response.json()) as {
+    items?: Array<{ name: string; contentType: string; size: string; timeCreated: string }>;
+  };
+
+  if (!json.items) return [];
+
+  return json.items
+    .filter((item) => item.name !== RECORDINGS_PREFIX) // skip the folder placeholder
+    .map((item) => ({
+      name: item.name,
+      displayName: item.name.replace(RECORDINGS_PREFIX, ''),
+      contentType: item.contentType,
+      size: Number(item.size),
+      timeCreated: item.timeCreated,
+    }))
+    .sort((a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime());
+}
+
+/**
+ * Downloads a recording from GCS as a Blob.
+ */
+export async function downloadRecordingBlob(
+  objectName: string,
+  accessToken: string,
+): Promise<Blob> {
+  const url =
+    `https://storage.googleapis.com/storage/v1/b/${RECORDINGS_BUCKET}/o/` +
+    `${encodeURIComponent(objectName)}?alt=media`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to download recording (${response.status}): ${text}`);
+  }
+
+  return response.blob();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Google Drive Download
 // ─────────────────────────────────────────────────────────────────────────────
 
