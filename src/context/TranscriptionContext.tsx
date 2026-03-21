@@ -26,7 +26,7 @@ export type TranscriptionAction =
   | { type: 'UPDATE_TRANSCRIPT_ENTRY'; entry: TranscriptEntry }
   | { type: 'SET_SUMMARY'; summary: string }
   | { type: 'SET_REMARKS'; remarks: SpeakerRemark[] }
-  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[] }
+  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; chatCacheId?: string | null }
   | { type: 'SET_CLOUD_STORAGE_URL'; url: string }
   | { type: 'OPEN_SPEAKER_MODAL'; entryId: string }
   | { type: 'CLOSE_SPEAKER_MODAL' }
@@ -63,6 +63,7 @@ const initialState: TranscriptionState = {
     behaviouralSummary: '',
     remarks: [],
     cloudStorageUrl: null,
+    chatCacheId: null,
   },
   ui: {
     speakerModalOpen: false,
@@ -166,6 +167,7 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
           structuredSummary: action.structuredSummary,
           behaviouralSummary: action.behaviouralSummary,
           remarks: action.remarks,
+          chatCacheId: action.chatCacheId ?? null,
         },
       };
 
