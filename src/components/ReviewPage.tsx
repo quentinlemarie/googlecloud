@@ -78,9 +78,11 @@ export const ReviewPage = React.memo(function ReviewPage({
   }, [state, dispatch]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 relative">
+    <div className="min-h-screen bg-gray-50 p-6">
       {/* Logo – top-right, discreet */}
-      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+      <div className="flex justify-end mb-2">
+        <img src={logoSrc} alt="Smart Transcription logo" className="h-8 opacity-70" />
+      </div>
       <div className="max-w-3xl mx-auto">
         <div className="mb-6 text-center">
           <h2 className="text-2xl font-bold" style={{ color: BRAND_RED }}>
