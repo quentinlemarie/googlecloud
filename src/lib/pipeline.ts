@@ -338,7 +338,8 @@ export async function autoSaveReport(
 
     const summaryText = [executiveSummary, structuredSummary].join(' ');
     const baseName = buildExportBaseName(speakers, transcript, summaryText);
-    const objectName = `${TRANSCRIPT_PREFIX}${baseName}.txt`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const objectName = `${TRANSCRIPT_PREFIX}${baseName}_${timestamp}.txt`;
 
     const url = await uploadToCloudStorage(content, objectName, accessToken);
     return { objectName, url };

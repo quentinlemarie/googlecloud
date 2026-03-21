@@ -99,7 +99,7 @@ export const OutputPage = React.memo(function OutputPage() {
       structuredSummary,
       behaviouralSummary,
       remarks,
-      (msg) => console.warn('Auto-save failed:', msg),
+      (msg) => dispatch({ type: 'SET_ERROR', message: `Auto-save failed: ${msg}` }),
     ).then((result) => {
       if (result) {
         dispatch({ type: 'SET_AUTO_SAVE', objectName: result.objectName, url: result.url });
@@ -117,7 +117,7 @@ export const OutputPage = React.memo(function OutputPage() {
     if (autoSavedObjectName) {
       deleteAutoSavedReport(
         autoSavedObjectName,
-        (msg) => console.warn('Auto-save delete failed:', msg),
+        (msg) => dispatch({ type: 'SET_ERROR', message: `Failed to delete report: ${msg}` }),
       );
       dispatch({ type: 'CLEAR_AUTO_SAVE' });
     }
