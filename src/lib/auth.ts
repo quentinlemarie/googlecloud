@@ -3,6 +3,55 @@ import type { TokenResponse } from '../types/google.d.ts';
 
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Token cache
+// ─────────────────────────────────────────────────────────────────────────────
+// Google access tokens are valid for ~3600 s.  We cache the token both
+// in-memory AND in sessionStorage so the user is only prompted once per
+// browser session (or when the token actually expires).  A 60-second safety
+// margin ensures we never hand out a token that will expire mid-request.
+// ─────────────────────────────────────────────────────────────────────────────
+const SS_TOKEN_KEY = 'gauth_access_token';
+const SS_EXPIRY_KEY = 'gauth_token_expires_at';
+const TOKEN_EXPIRY_MARGIN_MS = 60_000; // refresh 60 s before actual expiry
+
+let _cachedToken: string | null = null;
+let _tokenExpiresAt = 0; // epoch-ms
+
+/** Restore token from sessionStorage on module load (survives page refresh). */
+function _hydrateFromSession(): void {
+  try {
+    const token = sessionStorage.getItem(SS_TOKEN_KEY);
+    const expiry = sessionStorage.getItem(SS_EXPIRY_KEY);
+    if (token && expiry) {
+      const expiresAt = Number(expiry);
+      if (Date.now() < expiresAt - TOKEN_EXPIRY_MARGIN_MS) {
+        _cachedToken = token;
+        _tokenExpiresAt = expiresAt;
+      } else {
+        // Expired – clean up
+        sessionStorage.removeItem(SS_TOKEN_KEY);
+        sessionStorage.removeItem(SS_EXPIRY_KEY);
+      }
+    }
+  } catch {
+    // sessionStorage unavailable (e.g. incognito quota exceeded) – ignore
+  }
+}
+_hydrateFromSession();
+
+/** Persist the current token to sessionStorage. */
+function _persistToSession(): void {
+  try {
+    if (_cachedToken) {
+      sessionStorage.setItem(SS_TOKEN_KEY, _cachedToken);
+      sessionStorage.setItem(SS_EXPIRY_KEY, String(_tokenExpiresAt));
+    }
+  } catch {
+    // sessionStorage unavailable – cache stays in-memory only
+  }
+}
+
 /**
  * Ensures the Google Identity Services script is loaded.
  * If the script tag already exists in the DOM (added via index.html), it waits
@@ -57,10 +106,13 @@ function loadGoogleIdentityServices(): Promise<void> {
 }
 
 /**
- * Promise-based wrapper around Google Identity Services token client.
+ * Returns a valid Google OAuth access token, reusing a cached token when
+ * possible so the user is only prompted once per session.
  *
- * Key fix: the callback is assigned BEFORE `requestAccessToken()` is called,
- * eliminating the race condition that caused Drive login to redirect fullscreen.
+ * On the very first call the account-chooser popup is shown.  Subsequent calls
+ * silently return the cached token until it expires (minus a safety margin),
+ * at which point GIS is asked for a fresh token with `prompt: ''` so the
+ * browser can renew silently using the existing grant.
  *
  * @returns Promise that resolves with an OAuth access token string.
  * @throws  Error with user-friendly message on failure or popup block.
@@ -72,7 +124,17 @@ export async function requestAccessToken(): Promise<string> {
     );
   }
 
+  // Return cached token if it's still valid
+  if (_cachedToken && Date.now() < _tokenExpiresAt - TOKEN_EXPIRY_MARGIN_MS) {
+    return _cachedToken;
+  }
+
   await loadGoogleIdentityServices();
+
+  // Determine whether this is the very first auth or a silent renewal.
+  // First time → show account picker so the user can choose which account.
+  // Renewal   → use empty prompt so GIS can renew silently.
+  const isFirstAuth = _cachedToken === null;
 
   return new Promise<string>((resolve, reject) => {
     if (!window.google?.accounts?.oauth2) {
@@ -109,13 +171,20 @@ export async function requestAccessToken(): Promise<string> {
         reject(new Error('No access token returned by Google OAuth'));
         return;
       }
+
+      // Cache the token and compute its expiration time
+      _cachedToken = response.access_token;
+      const expiresInMs = (response.expires_in ?? 3600) * 1000;
+      _tokenExpiresAt = Date.now() + expiresInMs;
+      _persistToSession();
+
       resolve(response.access_token);
     };
 
     try {
-      // Show the account chooser so the user can pick (or confirm) the Google
-      // account they want to use, rather than silently reusing a cached session.
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
+      tokenClient.requestAccessToken({
+        prompt: isFirstAuth ? 'select_account' : '',
+      });
     } catch {
       // Popup blocked – surface a clear message
       reject(
@@ -125,4 +194,31 @@ export async function requestAccessToken(): Promise<string> {
       );
     }
   });
+}
+
+/**
+ * Returns the currently cached access token if it is still valid, or `null`
+ * if no token is cached / the token has expired.  Does NOT trigger a popup.
+ */
+export function getAccessToken(): string | null {
+  if (_cachedToken && Date.now() < _tokenExpiresAt - TOKEN_EXPIRY_MARGIN_MS) {
+    return _cachedToken;
+  }
+  return null;
+}
+
+/**
+ * Clears the cached token, forcing a fresh authentication on the next call.
+ * Useful for sign-out flows or when a 401 response indicates the token is
+ * revoked.
+ */
+export function clearAccessToken(): void {
+  _cachedToken = null;
+  _tokenExpiresAt = 0;
+  try {
+    sessionStorage.removeItem(SS_TOKEN_KEY);
+    sessionStorage.removeItem(SS_EXPIRY_KEY);
+  } catch {
+    // sessionStorage unavailable – ignore
+  }
 }
