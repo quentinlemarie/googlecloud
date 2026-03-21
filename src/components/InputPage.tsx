@@ -222,9 +222,9 @@ export const InputPage = React.memo(function InputPage() {
       if (!file) return;
 
       // Only accept audio or video files (check MIME type first, fall back to extension)
-      const mediaExtensions = /\.(mp3|wav|m4a|webm|ogg|flac|aac|wma|opus|mp4|mov|avi|mkv|m4v)$/i;
+      const mediaExtensions = /\.(mp3|wav|m4a|caf|webm|ogg|flac|aac|wma|opus|mp4|mov|avi|mkv|m4v)$/i;
       if (!file.type.startsWith('audio/') && !file.type.startsWith('video/') && !mediaExtensions.test(file.name)) {
-        onError('Please drop an audio or video file (MP3, WAV, M4A, MP4, MOV…)');
+        onError('Please drop an audio or video file (MP3, WAV, M4A, CAF, MP4, MOV…)');
         return;
       }
 
@@ -425,7 +425,7 @@ export const InputPage = React.memo(function InputPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/*,video/*,.m4a"
+            accept="audio/*,video/*,.m4a,.caf"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -542,7 +542,7 @@ export const InputPage = React.memo(function InputPage() {
               <input
                 ref={addFileInputRef}
                 type="file"
-                accept="audio/*,video/*,.m4a"
+                accept="audio/*,video/*,.m4a,.caf"
                 className="hidden"
                 onChange={handleAddMoreFiles}
               />
