@@ -1,8 +1,9 @@
 import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage, AnalysisMode } from '../types';
-import { transcribeAudio } from './gemini';
-import { generateSummaryAndRemarks } from './gemini';
+import { transcribeAudio, transcribeMultipleAudio, type AudioEntry } from './gemini';
+import { generateSummaryAndRemarks, createAnalysisCache } from './gemini';
 import {
   uploadToCloudStorage,
+  deleteFromCloudStorage,
   downloadDriveFile,
   openDrivePicker,
   openDriveFolderPicker,
@@ -13,6 +14,7 @@ import {
 import { requestAccessToken } from './auth';
 import { reportError } from './errorReporting';
 import { mimeToExtension, extensionToMime } from '../utils/mimeUtils';
+import { TRANSCRIPT_BUCKET, TRANSCRIPT_PREFIX } from './constants';
 
 export type ProgressCallback = (progress: number, message: string) => void;
 export type ErrorCallback = (message: string) => void;
@@ -111,6 +113,59 @@ export async function processAudioFile(
 }
 
 /**
+ * Processes multiple audio files as a single collated recording.
+ * Each file is converted to base64 and sent together to Gemini
+ * so that speaker identification is consistent across all parts.
+ */
+export async function processMultipleAudioFiles(
+  files: File[],
+  onProgress: ProgressCallback,
+  onError: ErrorCallback,
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
+): Promise<ProcessAudioResult | null> {
+  if (files.length === 0) return null;
+  if (files.length === 1) {
+    return processAudioFile(files[0], onProgress, onError, outputLanguage, analysisMode);
+  }
+
+  try {
+    onProgress(30, `Reading ${files.length} audio files…`);
+    const audioEntries: AudioEntry[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const base64 = await fileToBase64(file);
+      const mimeType = file.type || 'audio/webm';
+      audioEntries.push({ base64, mimeType });
+      onProgress(30 + Math.round((i + 1) / files.length * 10), `Read ${i + 1}/${files.length} files…`);
+    }
+
+    const stopTicker = startProgressTicker(onProgress, `Transcribing ${files.length} collated files…`, 40, 90);
+    const { speakers, transcript, warnings } = await transcribeMultipleAudio(audioEntries, outputLanguage, analysisMode);
+    stopTicker();
+
+    if (warnings.length > 0) {
+      console.warn('Transcription warnings:', warnings);
+    }
+
+    // Use the first file's base64/mimeType for audio playback in the review page
+    onProgress(95, 'Cleaning up…');
+    return {
+      speakers,
+      transcript,
+      audioBase64: audioEntries[0].base64,
+      mimeType: audioEntries[0].mimeType,
+    };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Unknown error during processing';
+    onError(message);
+    await reportError(err, 'processMultipleAudioFiles');
+    return null;
+  }
+}
+
+/**
  * Loads an audio file from Google Drive, then runs the transcription pipeline.
  */
 export async function processFromDrive(
@@ -158,11 +213,11 @@ export async function generateOutputs(
   onProgress: ProgressCallback,
   onError: ErrorCallback,
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks'] } | null> {
+): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks']; chatCacheId: string | null } | null> {
   try {
     onProgress(5, 'Generating summary…');
     const stopTicker = startProgressTicker(onProgress, 'Generating summary…', 5, 95);
-    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings } = await generateSummaryAndRemarks(
+    const { executiveSummary, structuredSummary, behaviouralSummary, remarks, warnings, _cacheContext } = await generateSummaryAndRemarks(
       state.edited.transcript,
       state.edited.speakers,
       outputLanguage,
@@ -174,8 +229,13 @@ export async function generateOutputs(
       console.warn('Summary warnings:', warnings);
     }
 
+    // Create a Gemini context cache so follow-up chat reuses the same
+    // analysis conversation without resending all tokens.
+    onProgress(97, 'Preparing chat context…');
+    const chatCacheId = await createAnalysisCache(_cacheContext, outputLanguage);
+
     onProgress(100, 'Done');
-    return { executiveSummary, structuredSummary, behaviouralSummary, remarks };
+    return { executiveSummary, structuredSummary, behaviouralSummary, remarks, chatCacheId };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);
@@ -229,6 +289,89 @@ export async function saveToCloudStorage(
     onError(message);
     await reportError(err, 'saveToCloudStorage');
     return null;
+  }
+}
+
+/**
+ * Auto-saves the full report (except audio) to GCS under the Transcript/ prefix.
+ * Returns the GCS object name (for later deletion) and the public URL, or null on failure.
+ */
+export async function autoSaveReport(
+  transcript: TranscriptEntry[],
+  speakers: Speaker[],
+  executiveSummary: string,
+  structuredSummary: string,
+  behaviouralSummary: string,
+  remarks: { speakerName: string; remark: string }[],
+  onError: ErrorCallback,
+): Promise<{ objectName: string; url: string } | null> {
+  try {
+    const accessToken = await requestAccessToken();
+
+    // Build the linear transcript text
+    const speakerMap: Record<string, string> = {};
+    for (const s of speakers) {
+      speakerMap[s.id] = s.name || s.label;
+    }
+    const transcriptText = transcript
+      .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
+      .join('\n');
+
+    const remarksText = remarks
+      .map((r) => `- ${r.speakerName || 'Speaker'}: ${r.remark}`)
+      .join('\n');
+
+    const content = [
+      'EXECUTIVE SUMMARY',
+      '=================',
+      executiveSummary,
+      '',
+      'STRUCTURED SUMMARY',
+      '==================',
+      structuredSummary,
+      '',
+      'BEHAVIOURAL SUMMARY',
+      '===================',
+      behaviouralSummary,
+      '',
+      'INDIVIDUAL BEHAVIOURAL REMARKS',
+      '==============================',
+      remarksText,
+      '',
+      'TRANSCRIPT',
+      '==========',
+      transcriptText,
+    ].join('\n');
+
+    const summaryText = [executiveSummary, structuredSummary].join(' ');
+    const baseName = buildExportBaseName(speakers, transcript, summaryText);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const objectName = `${TRANSCRIPT_PREFIX}${baseName}_${timestamp}.txt`;
+
+    const url = await uploadToCloudStorage(content, objectName, accessToken);
+    return { objectName, url };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    onError(message);
+    await reportError(err, 'autoSaveReport');
+    return null;
+  }
+}
+
+/**
+ * Deletes a previously auto-saved report from GCS.
+ */
+export async function deleteAutoSavedReport(
+  objectName: string,
+  onError: ErrorCallback,
+): Promise<void> {
+  try {
+    const accessToken = await requestAccessToken();
+    await deleteFromCloudStorage(objectName, TRANSCRIPT_BUCKET, accessToken);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    onError(message);
+    await reportError(err, 'deleteAutoSavedReport');
   }
 }
 

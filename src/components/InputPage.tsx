@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranscription } from '../context/useTranscription';
-import { processAudioFile, processFromDrive } from '../lib/pipeline';
+import { processAudioFile, processMultipleAudioFiles, processFromDrive } from '../lib/pipeline';
 import { BRAND_RED } from '../lib/constants';
 import type { OutputLanguage, Speaker, TranscriptEntry, AnalysisMode } from '../types';
 import { requestAccessToken } from '../lib/auth';
 import { uploadRecordingBlob } from '../lib/storage';
 import { ConfirmDialog } from './ConfirmDialog';
+import { RecordingsLibrary } from './RecordingsLibrary';
 import { useAudioLevel, SILENCE_THRESHOLD } from '../hooks/useAudioLevel';
 import { AudioLevelIndicator } from './AudioLevelIndicator';
 import logoSrc from '../assets/Logo.svg';
@@ -32,6 +33,12 @@ function chooseMimeType(): { mimeType: string; ext: string } {
   );
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export const InputPage = React.memo(function InputPage() {
   const { state, dispatch } = useTranscription();
   const outputLanguage = state.ui.outputLanguage;
@@ -45,6 +52,9 @@ export const InputPage = React.memo(function InputPage() {
   const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
+  const [showRecordings, setShowRecordings] = useState(false);
+  const [collectedFiles, setCollectedFiles] = useState<File[]>([]);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
 
   // Live audio-level (0 – 1) for the visual indicator
   const audioLevel = useAudioLevel(micStream);
@@ -118,36 +128,63 @@ export const InputPage = React.memo(function InputPage() {
     }
   }, [startLoading, onProgress, onError, finishLoading, dispatch, outputLanguage, analysisMode]);
 
-  // ── Shared file processing (used by file input + drag-and-drop) ─────────
-  const processUploadedFile = useCallback(
-    async (file: File) => {
-      startLoading('Uploading file…');
-      onProgress(5, `Saving file to Cloud Storage (mtp-storage/Recordings/)…`);
-
-      // Upload the file to mtp-storage/Recordings/ – non-fatal if it fails
-      try {
-        const accessToken = await requestAccessToken();
-        await uploadRecordingBlob(file, file.name, accessToken);
-        onProgress(25, 'File saved. Transcribing…');
-      } catch (uploadErr) {
-        console.warn('File GCS upload failed (continuing with transcription):', uploadErr);
-        onProgress(25, 'Transcribing…');
-      }
-
-      const result = await processAudioFile(file, onProgress, onError, outputLanguage, analysisMode);
-      if (result) finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
-    },
-    [startLoading, onProgress, onError, finishLoading, outputLanguage, analysisMode]
-  );
-
   // ── Local Upload ──────────────────────────────────────────────────────────
   const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      await processUploadedFile(file);
+      setCollectedFiles((prev) => [...prev, file]);
+      // Reset the input so the same file can be re-added if needed
+      e.target.value = '';
     },
-    [processUploadedFile]
+    []
+  );
+
+  const handleAddMoreFiles = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setCollectedFiles((prev) => [...prev, file]);
+      e.target.value = '';
+    },
+    []
+  );
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setCollectedFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleClearFiles = useCallback(() => {
+    setCollectedFiles([]);
+  }, []);
+
+  /** Process all collected files as a single collated recording. */
+  const handleProcessCollected = useCallback(
+    async () => {
+      if (collectedFiles.length === 0) return;
+
+      startLoading('Uploading files…');
+
+      // Upload each file to Cloud Storage – non-fatal if it fails
+      for (let i = 0; i < collectedFiles.length; i++) {
+        const file = collectedFiles[i];
+        onProgress(Math.round((i / collectedFiles.length) * 20), `Saving file ${i + 1}/${collectedFiles.length} to Cloud Storage…`);
+        try {
+          const accessToken = await requestAccessToken();
+          await uploadRecordingBlob(file, file.name, accessToken);
+        } catch (uploadErr) {
+          console.warn('File GCS upload failed (continuing with transcription):', uploadErr);
+        }
+      }
+      onProgress(25, 'Files saved. Transcribing…');
+
+      const result = await processMultipleAudioFiles(collectedFiles, onProgress, onError, outputLanguage, analysisMode);
+      if (result) {
+        setCollectedFiles([]);
+        finishLoading(result.speakers, result.transcript, result.audioBase64, result.mimeType);
+      }
+    },
+    [collectedFiles, startLoading, onProgress, onError, finishLoading, outputLanguage, analysisMode]
   );
 
   // ── Drag & Drop ───────────────────────────────────────────────────────────
@@ -175,7 +212,7 @@ export const InputPage = React.memo(function InputPage() {
   }, []);
 
   const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
+    (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       dragCounter.current = 0;
@@ -187,13 +224,22 @@ export const InputPage = React.memo(function InputPage() {
       // Only accept audio or video files (check MIME type first, fall back to extension)
       const mediaExtensions = /\.(mp3|wav|m4a|caf|webm|ogg|flac|aac|wma|opus|mp4|mov|avi|mkv|m4v)$/i;
       if (!file.type.startsWith('audio/') && !file.type.startsWith('video/') && !mediaExtensions.test(file.name)) {
-        onError('Please drop an audio or video file (MP3, WAV, M4A, MP4, MOV…)');
+        onError('Please drop an audio or video file (MP3, WAV, M4A, CAF, MP4, MOV…)');
         return;
       }
 
-      await processUploadedFile(file);
+      setCollectedFiles((prev) => [...prev, file]);
     },
-    [processUploadedFile, onError]
+    [onError]
+  );
+
+  // ── Recordings Library ────────────────────────────────────────────────────
+  const handleUseRecording = useCallback(
+    (file: File) => {
+      setShowRecordings(false);
+      setCollectedFiles((prev) => [...prev, file]);
+    },
+    []
   );
 
   // ── Microphone ────────────────────────────────────────────────────────────
@@ -261,45 +307,42 @@ export const InputPage = React.memo(function InputPage() {
     };
   }, []);
 
-  // ── Web Share Target: pick up audio shared from another app (e.g. iPhone Voice Memos)
+  // ── Share-target: pick up files shared from other apps (e.g. Voice Memos on iOS) ──
   useEffect(() => {
-    const SHARE_CACHE = 'share-target-audio';
-    const SHARE_KEY = '/shared-audio-file';
-
     (async () => {
       try {
-        const cache = await caches.open(SHARE_CACHE);
-        const response = await cache.match(SHARE_KEY);
-        if (!response) return;
+        const cache = await caches.open('share-target-audio');
+        const keys = await cache.keys();
+        if (keys.length === 0) return;
 
-        // Remove the cached entry immediately so it isn't replayed on next visit.
-        await cache.delete(SHARE_KEY);
-
-        const blob = await response.blob();
-        if (!blob || blob.size === 0) return;
-
-        const rawName = response.headers.get('X-Shared-Filename');
-        const filename = rawName ? decodeURIComponent(rawName) : 'shared-audio.m4a';
-        const mime = blob.type || 'audio/mp4';
-
-        const file = new File([blob], filename, { type: mime });
-        await processUploadedFile(file);
+        for (const request of keys) {
+          const response = await cache.match(request);
+          if (!response) continue;
+          const blob = await response.blob();
+          const url = new URL(request.url);
+          const rawName = url.searchParams.get('name');
+          const filename = rawName ? decodeURIComponent(rawName) : 'shared-audio.m4a';
+          const mime = blob.type || 'audio/mp4';
+          const file = new File([blob], filename, { type: mime });
+          setCollectedFiles((prev) => [...prev, file]);
+          await cache.delete(request);
+        }
       } catch (err) {
         console.warn('Share target: failed to retrieve shared file', err);
       }
     })();
-  }, [processUploadedFile]);
+  }, []);
 
   return (
     <div
-      className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative"
+      className="min-h-screen bg-gray-50 flex flex-col p-6 relative"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Logo – top-right, discreet */}
-      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+      <img src={logoSrc} alt="Smart Transcription logo" className="self-end h-8 opacity-70 shrink-0" />
 
       {/* Drop-zone overlay */}
       {isDragging && (
@@ -312,6 +355,7 @@ export const InputPage = React.memo(function InputPage() {
         </div>
       )}
 
+      <div className="flex-1 flex flex-col items-center justify-center w-full">
       <div className="w-full max-w-lg">
         {/* Logo / Title */}
         <div className="text-center mb-10">
@@ -435,8 +479,92 @@ export const InputPage = React.memo(function InputPage() {
           <p className="text-center text-xs text-gray-400 pt-2">
             or drag &amp; drop an audio or video file anywhere on this page
           </p>
+
+          {/* My Recordings */}
+          <button
+            onClick={() => setShowRecordings(true)}
+            className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <span className="text-3xl">📼</span>
+            <div className="text-left">
+              <div className="font-semibold text-gray-800">My Recordings</div>
+              <div className="text-sm text-gray-500">Browse, download or reuse a past recording</div>
+            </div>
+          </button>
         </div>
+
+        {/* ── Collected files queue ─────────────────────────────────── */}
+        {collectedFiles.length > 0 && (
+          <div className="mt-6 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-800">
+                {collectedFiles.length === 1 ? '1 file selected' : `${collectedFiles.length} files selected`}
+              </h3>
+              <button
+                onClick={handleClearFiles}
+                className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+              >
+                Clear all
+              </button>
+            </div>
+
+            <ul className="space-y-2 mb-4">
+              {collectedFiles.map((file, index) => (
+                <li key={`${file.name}-${index}`} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="text-lg">🎵</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-700 truncate">{file.name}</div>
+                    <div className="text-xs text-gray-400">{formatFileSize(file.size)}</div>
+                  </div>
+                  {index > 0 && (
+                    <span className="text-xs text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full shrink-0">
+                      Part {index + 1}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleRemoveFile(index)}
+                    className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                    title="Remove file"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => addFileInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2 border border-dashed border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
+              >
+                <span>＋</span> Add
+              </button>
+              <input
+                ref={addFileInputRef}
+                type="file"
+                accept="audio/*,video/*,.m4a,.caf"
+                className="hidden"
+                onChange={handleAddMoreFiles}
+              />
+              <button
+                onClick={handleProcessCollected}
+                className="flex-1 flex items-center justify-center gap-2 text-white rounded-lg px-4 py-2.5 text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: BRAND_RED }}
+              >
+                ✓ Ready
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      </div>
+
+      {showRecordings && (
+        <RecordingsLibrary
+          onClose={() => setShowRecordings(false)}
+          onUse={handleUseRecording}
+        />
+      )}
 
       {confirmTarget === 'cancel' && (
         <ConfirmDialog

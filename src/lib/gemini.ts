@@ -1,15 +1,20 @@
-import { GEMINI_API_KEY, GEMINI_MODELS } from './constants';
+import { GEMINI_API_KEY, GEMINI_MODELS, CHAT_CACHE_TTL_S } from './constants';
 import { validateAndCleanSpeakers, validateSummaryResponse } from './validation';
 import { validateSpeakerTimestamps } from './audioProcessing';
-import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode } from '../types';
+import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode, ChatMessage } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function callGemini(model: string, prompt: string, audioPart?: { inlineData: { mimeType: string; data: string } }): Promise<string> {
+type AudioPart = { inlineData: { mimeType: string; data: string } };
+
+async function callGemini(model: string, prompt: string, audioParts?: AudioPart | AudioPart[]): Promise<string> {
   const parts: unknown[] = [{ text: prompt }];
-  if (audioPart) parts.push(audioPart);
+  if (audioParts) {
+    const arr = Array.isArray(audioParts) ? audioParts : [audioParts];
+    for (const ap of arr) parts.push(ap);
+  }
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -142,22 +147,25 @@ function extractJSON(text: string): unknown {
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** A single audio clip described by its base64 data and MIME type. */
+export interface AudioEntry {
+  base64: string;
+  mimeType: string;
+}
+
 /**
- * Transcribes audio and identifies speakers using Gemini.
- * Audio may be provided as a base64-encoded string with mimeType,
- * or as a publicly accessible URL (pass url instead of base64).
+ * Build the transcription prompt and shared instruction block.
  */
-export async function transcribeAudio(
-  audioBase64: string,
-  mimeType: string,
-  outputLanguage: OutputLanguage = 'en',
-  analysisMode: AnalysisMode = 'deep'
-): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
-  const languageInstruction = outputLanguage === 'fr'
+function buildTranscriptionPrompt(languageCode: OutputLanguage, fileCount: number): string {
+  const languageInstruction = languageCode === 'fr'
     ? 'Write ALL output in French: transcribe spoken words in French, and write names, roles, and company names in French where applicable.'
     : 'Write ALL output text in English.';
 
-  const prompt = `
+  const multiFileNote = fileCount > 1
+    ? `\n- You are given ${fileCount} audio files that are parts of the SAME meeting recorded in sequence. Treat them as one continuous conversation. Maintain consistent speaker IDs across all files. Timestamps for each subsequent file should continue from where the previous file ended.`
+    : '';
+
+  return `
 You are a professional meeting transcription assistant.
 
 CRITICAL INSTRUCTIONS:
@@ -192,20 +200,15 @@ Rules:
 - Use empty strings for unknown names and companies (NEVER use "Unknown", "N/A", etc.)
 - For role: infer seniority and title from context even when not explicitly stated — consider authority level, how others address the speaker, topics they lead, self-introductions, and decision-making patterns; use empty string only if no inference is possible
 - Keep speaker IDs consistent throughout the transcript
-- Timestamps must be accurate to the audio
+- Timestamps must be accurate to the audio${multiFileNote}
 `.trim();
+}
 
-  const audioPart = {
-    inlineData: { mimeType, data: audioBase64 },
-  };
-
-  const model = GEMINI_MODELS[analysisMode];
-  const raw = await callGemini(model, prompt, audioPart);
+/** Parse Gemini transcription output and validate/clean the result. */
+function parseTranscriptionResult(raw: string): { speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] } {
   const parsed = extractJSON(raw);
-
   const result = validateAndCleanSpeakers(parsed);
 
-  // Validate & correct timestamps
   const timestampResult = validateSpeakerTimestamps(
     result.data.speakers,
     result.data.transcript
@@ -219,14 +222,58 @@ Rules:
 }
 
 /**
+ * Transcribes a single audio file and identifies speakers using Gemini.
+ */
+export async function transcribeAudio(
+  audioBase64: string,
+  mimeType: string,
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
+): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
+  const prompt = buildTranscriptionPrompt(outputLanguage, 1);
+  const audioPart: AudioPart = { inlineData: { mimeType, data: audioBase64 } };
+  const model = GEMINI_MODELS[analysisMode];
+  const raw = await callGemini(model, prompt, audioPart);
+  return parseTranscriptionResult(raw);
+}
+
+/**
+ * Transcribes multiple audio files (collated parts of the same meeting)
+ * and identifies speakers using Gemini. All files are sent together so
+ * that speaker identification is consistent across all parts.
+ */
+export async function transcribeMultipleAudio(
+  entries: AudioEntry[],
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
+): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
+  const prompt = buildTranscriptionPrompt(outputLanguage, entries.length);
+  const audioParts: AudioPart[] = entries.map((entry) => ({
+    inlineData: { mimeType: entry.mimeType, data: entry.base64 },
+  }));
+  const model = GEMINI_MODELS[analysisMode];
+  const raw = await callGemini(model, prompt, audioParts);
+  return parseTranscriptionResult(raw);
+}
+
+/**
  * Generates a meeting summary and per-speaker behavioural remarks.
+ * Also returns the prompt and raw model response so a context cache can be
+ * created for follow-up chat without resending tokens.
  */
 export async function generateSummaryAndRemarks(
   transcript: TranscriptEntry[],
   speakers: Speaker[],
   outputLanguage: OutputLanguage = 'en',
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; warnings: string[] }> {
+): Promise<{
+  executiveSummary: string;
+  structuredSummary: string;
+  behaviouralSummary: string;
+  remarks: SpeakerRemark[];
+  warnings: string[];
+  _cacheContext: { prompt: string; rawResponse: string };
+}> {
   const speakerMap = Object.fromEntries(speakers.map((s) => [s.id, s.name || s.label]));
   const formattedTranscript = transcript
     .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
@@ -281,5 +328,171 @@ Return ONLY a JSON object (no markdown code fences, no explanation):
     behaviouralSummary: result.data.behaviouralSummary,
     remarks,
     warnings: result.warnings,
+    _cacheContext: { prompt, rawResponse: raw },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context cache – keeps the analysis conversation server-side so follow-up
+// chat messages don't resend the full transcript / summaries.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a Gemini context cache containing the original analysis
+ * conversation (prompt + model response). Returns the cache resource name
+ * (`cachedContents/…`) or `null` if caching is unavailable.
+ */
+export async function createAnalysisCache(
+  cacheContext: { prompt: string; rawResponse: string },
+  outputLanguage: OutputLanguage = 'en',
+): Promise<string | null> {
+  const languageInstruction = outputLanguage === 'fr'
+    ? 'Respond in French.'
+    : 'Respond in English.';
+
+  const model = GEMINI_MODELS.deep;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: `models/${model}`,
+          displayName: 'Meeting analysis context',
+          systemInstruction: {
+            parts: [{
+              text: `You are the same expert meeting analyst who just produced the analysis in this conversation. Answer the user's follow-up questions based on the transcript and your own analysis. Stay consistent with your previous findings. Do not hallucinate information not present in the transcript or analysis. ${languageInstruction}`,
+            }],
+          },
+          contents: [
+            { role: 'user', parts: [{ text: cacheContext.prompt }] },
+            { role: 'model', parts: [{ text: cacheContext.rawResponse }] },
+          ],
+          ttl: `${CHAT_CACHE_TTL_S}s`,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      console.warn('Context cache creation failed:', response.status, await response.text());
+      return null;
+    }
+
+    const data = (await response.json()) as { name?: string };
+    return data.name ?? null;
+  } catch (err) {
+    console.warn('Context cache creation error:', err);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat with analysis context (cache-backed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sends a follow-up chat message using the cached analysis context.
+ * When a cache is available the request only contains the new conversation
+ * turns — the original transcript + analysis lives server-side in the cache.
+ *
+ * Falls back to inline context when no cache ID is available.
+ */
+export async function chatWithAnalysis(
+  history: ChatMessage[],
+  userMessage: string,
+  cacheId: string | null,
+  fallbackContext?: {
+    transcript: TranscriptEntry[];
+    speakers: Speaker[];
+    executiveSummary: string;
+    structuredSummary: string;
+    behaviouralSummary: string;
+    remarks: SpeakerRemark[];
+    outputLanguage: OutputLanguage;
+  },
+): Promise<string> {
+  const contents: { role: string; parts: { text: string }[] }[] = [];
+  for (const msg of history) {
+    contents.push({ role: msg.role, parts: [{ text: msg.text }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+  const model = GEMINI_MODELS.deep;
+
+  // ── Cache-backed path (preferred) ────────────────────────────────────────
+  if (cacheId) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cachedContent: cacheId, contents }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+    }
+
+    const data = (await response.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  }
+
+  // ── Inline fallback (no cache) ───────────────────────────────────────────
+  if (!fallbackContext) throw new Error('No analysis context available for chat');
+
+  const speakerMap = Object.fromEntries(
+    fallbackContext.speakers.map((s) => [s.id, s.name || s.label]),
+  );
+  const formattedTranscript = fallbackContext.transcript
+    .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
+    .join('\n');
+  const formattedRemarks = fallbackContext.remarks
+    .map((r) => `- ${r.speakerName || speakerMap[r.speakerId] || r.speakerId}: ${r.remark}`)
+    .join('\n');
+  const lang = fallbackContext.outputLanguage === 'fr' ? 'Respond in French.' : 'Respond in English.';
+
+  const systemText = `You are the same expert meeting analyst who produced the analysis below. Answer the user's follow-up questions. Stay consistent with your previous findings. Do not hallucinate. ${lang}
+
+=== TRANSCRIPT ===
+${formattedTranscript}
+
+=== EXECUTIVE SUMMARY ===
+${fallbackContext.executiveSummary}
+
+=== STRUCTURED SUMMARY ===
+${fallbackContext.structuredSummary}
+
+=== BEHAVIOURAL SUMMARY ===
+${fallbackContext.behaviouralSummary}
+
+=== INDIVIDUAL REMARKS ===
+${formattedRemarks}`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
