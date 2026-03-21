@@ -80,6 +80,29 @@ export async function uploadToCloudStorage(
 }
 
 /**
+ * Deletes an object from a Cloud Storage bucket.
+ */
+export async function deleteFromCloudStorage(
+  objectName: string,
+  bucket: string,
+  accessToken: string,
+): Promise<void> {
+  const url =
+    `https://storage.googleapis.com/storage/v1/b/${bucket}/o/` +
+    encodeURIComponent(objectName);
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text();
+    throw new Error(`Cloud Storage delete failed (${response.status}): ${text}`);
+  }
+}
+
+/**
  * Uploads a raw audio Blob (e.g. a microphone recording) directly to
  * `mtp-storage/Recordings/<filename>` and returns the GCS object URL.
  *

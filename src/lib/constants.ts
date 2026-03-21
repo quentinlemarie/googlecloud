@@ -43,6 +43,10 @@ export const GCS_BUCKET = import.meta.env.VITE_GCS_BUCKET || 'mtp-storage';
 export const RECORDINGS_BUCKET = 'mtp-storage';
 export const RECORDINGS_PREFIX = 'Recordings/';
 
+// Bucket and prefix used for auto-saved transcript reports
+export const TRANSCRIPT_BUCKET = 'mtp-storage';
+export const TRANSCRIPT_PREFIX = 'Transcript/';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OAuth scopes
 // ─────────────────────────────────────────────────────────────────────────────
