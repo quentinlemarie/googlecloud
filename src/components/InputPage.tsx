@@ -55,6 +55,8 @@ export const InputPage = React.memo(function InputPage() {
   const [showRecordings, setShowRecordings] = useState(false);
   const [collectedFiles, setCollectedFiles] = useState<File[]>([]);
   const addFileInputRef = useRef<HTMLInputElement>(null);
+  // Files sourced from Cloud Storage (RecordingsLibrary) don't need re-uploading.
+  const gcsFilesRef = useRef<WeakSet<File>>(new WeakSet());
 
   // Live audio-level (0 – 1) for the visual indicator
   const audioLevel = useAudioLevel(micStream);
@@ -163,12 +165,15 @@ export const InputPage = React.memo(function InputPage() {
     async () => {
       if (collectedFiles.length === 0) return;
 
-      startLoading('Uploading files…');
+      // Determine which files need to be uploaded (exclude those already in GCS).
+      const filesToUpload = collectedFiles.filter((f) => !gcsFilesRef.current.has(f));
 
-      // Upload each file to Cloud Storage – non-fatal if it fails
-      for (let i = 0; i < collectedFiles.length; i++) {
-        const file = collectedFiles[i];
-        onProgress(Math.round((i / collectedFiles.length) * 20), `Saving file ${i + 1}/${collectedFiles.length} to Cloud Storage…`);
+      startLoading(filesToUpload.length > 0 ? 'Uploading files…' : 'Processing…');
+
+      // Upload each new file to Cloud Storage – non-fatal if it fails
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        onProgress(Math.round((i / filesToUpload.length) * 20), `Saving file ${i + 1}/${filesToUpload.length} to Cloud Storage…`);
         try {
           const accessToken = await requestAccessToken();
           await uploadRecordingBlob(file, file.name, accessToken);
@@ -176,7 +181,7 @@ export const InputPage = React.memo(function InputPage() {
           console.warn('File GCS upload failed (continuing with transcription):', uploadErr);
         }
       }
-      onProgress(25, 'Files saved. Transcribing…');
+      onProgress(25, filesToUpload.length > 0 ? 'Files saved. Transcribing…' : 'Transcribing…');
 
       const result = await processMultipleAudioFiles(collectedFiles, onProgress, onError, outputLanguage, analysisMode);
       if (result) {
@@ -237,6 +242,8 @@ export const InputPage = React.memo(function InputPage() {
   const handleUseRecording = useCallback(
     (file: File) => {
       setShowRecordings(false);
+      // Mark as already saved so handleProcessCollected skips re-uploading it.
+      gcsFilesRef.current.add(file);
       setCollectedFiles((prev) => [...prev, file]);
     },
     []

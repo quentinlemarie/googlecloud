@@ -3,6 +3,9 @@ import type { TokenResponse } from '../types/google.d.ts';
 
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 
+/** Maximum time (ms) to wait for the GIS OAuth popup callback before rejecting. */
+const AUTH_TIMEOUT_MS = 120_000;
+
 /**
  * Ensures the Google Identity Services script is loaded.
  * If the script tag already exists in the DOM (added via index.html), it waits
@@ -94,8 +97,17 @@ export async function requestAccessToken(): Promise<string> {
       callback: () => {},
     });
 
+    // Safety-net: if the GIS library never fires the callback (e.g. the user
+    // closes the popup without interacting, or the popup is silently blocked in
+    // some browser configurations), the promise would hang forever.  Reject
+    // after AUTH_TIMEOUT_MS so callers can time out gracefully.
+    const timeoutId = setTimeout(() => {
+      reject(new Error('Authentication timed out. Please try again.'));
+    }, AUTH_TIMEOUT_MS);
+
     // Assign the real callback BEFORE calling requestAccessToken
     tokenClient.callback = (response: TokenResponse) => {
+      clearTimeout(timeoutId);
       if (response.error) {
         reject(
           new Error(
@@ -117,6 +129,7 @@ export async function requestAccessToken(): Promise<string> {
       // account they want to use, rather than silently reusing a cached session.
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch {
+      clearTimeout(timeoutId);
       // Popup blocked – surface a clear message
       reject(
         new Error(
