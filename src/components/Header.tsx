@@ -6,7 +6,8 @@ import { BRAND_RED } from '../lib/constants';
 import logoSrc from '../assets/Logo.svg';
 
 export const Header = React.memo(function Header() {
-  const { dispatch } = useTranscription();
+  const { state, dispatch } = useTranscription();
+  const isDone = state.pipeline.stage === 'DONE';
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
@@ -20,6 +21,14 @@ export const Header = React.memo(function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-3">
+            {isDone && (
+              <button
+                onClick={() => dispatch({ type: 'SET_STAGE', stage: 'REVIEW' })}
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                ✏️ Edit Speakers
+              </button>
+            )}
             <button
               onClick={() => setShowConfirm(true)}
               className="text-sm text-gray-500 hover:text-gray-700 underline"

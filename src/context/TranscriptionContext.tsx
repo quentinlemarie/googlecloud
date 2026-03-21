@@ -26,9 +26,8 @@ export type TranscriptionAction =
   | { type: 'UPDATE_TRANSCRIPT_ENTRY'; entry: TranscriptEntry }
   | { type: 'SET_SUMMARY'; summary: string }
   | { type: 'SET_REMARKS'; remarks: SpeakerRemark[] }
-  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; chatCacheId: string | null; _chatInlineContext?: { prompt: string; rawResponse: string } }
+  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; chatCacheId?: string | null }
   | { type: 'SET_CLOUD_STORAGE_URL'; url: string }
-  | { type: 'SET_CHAT_CACHE_ID'; chatCacheId: string | null }
   | { type: 'OPEN_SPEAKER_MODAL'; entryId: string }
   | { type: 'CLOSE_SPEAKER_MODAL' }
   | { type: 'SET_EXPORT_MENU_OPEN'; open: boolean }
@@ -168,16 +167,12 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
           structuredSummary: action.structuredSummary,
           behaviouralSummary: action.behaviouralSummary,
           remarks: action.remarks,
-          chatCacheId: action.chatCacheId,
-          _chatInlineContext: action._chatInlineContext,
+          chatCacheId: action.chatCacheId ?? null,
         },
       };
 
     case 'SET_CLOUD_STORAGE_URL':
       return { ...state, outputs: { ...state.outputs, cloudStorageUrl: action.url } };
-
-    case 'SET_CHAT_CACHE_ID':
-      return { ...state, outputs: { ...state.outputs, chatCacheId: action.chatCacheId } };
 
     case 'OPEN_SPEAKER_MODAL':
       return {
@@ -261,13 +256,12 @@ function loadFromStorage(): TranscriptionState {
 
 function saveToStorage(state: TranscriptionState): void {
   try {
-    // Don't persist transient UI state or large audio/cache data
-    const { ui: _ui, rawData, outputs, ...rest } = state;
+    // Don't persist transient UI state or large audio data
+    const { ui: _ui, rawData, ...rest } = state;
     const { audioBase64: _audioBase64, mimeType: _mimeType, ...persistableRawData } = rawData;
-    const { _chatInlineContext: _cacheCtx, ...persistableOutputs } = outputs;
     localStorage.setItem(
       LS_STATE_KEY,
-      JSON.stringify({ ...rest, rawData: persistableRawData, outputs: persistableOutputs, buildTime: APP_BUILD_TIME })
+      JSON.stringify({ ...rest, rawData: persistableRawData, buildTime: APP_BUILD_TIME })
     );
   } catch {
     // Storage may be full

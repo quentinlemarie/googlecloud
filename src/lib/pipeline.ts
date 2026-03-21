@@ -1,7 +1,6 @@
 import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage, AnalysisMode } from '../types';
 import { transcribeAudio } from './gemini';
 import { generateSummaryAndRemarks, createAnalysisCache } from './gemini';
-import { GEMINI_MODELS } from './constants';
 import {
   uploadToCloudStorage,
   downloadDriveFile,
@@ -152,7 +151,7 @@ export async function generateOutputs(
   onProgress: ProgressCallback,
   onError: ErrorCallback,
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks']; chatCacheId: string | null; _chatInlineContext: { prompt: string; rawResponse: string } } | null> {
+): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: TranscriptionState['outputs']['remarks']; chatCacheId: string | null } | null> {
   try {
     onProgress(5, 'Generating summary…');
     const stopTicker = startProgressTicker(onProgress, 'Generating summary…', 5, 95);
@@ -168,16 +167,13 @@ export async function generateOutputs(
       console.warn('Summary warnings:', warnings);
     }
 
+    // Create a Gemini context cache so follow-up chat reuses the same
+    // analysis conversation without resending all tokens.
+    onProgress(97, 'Preparing chat context…');
+    const chatCacheId = await createAnalysisCache(_cacheContext, outputLanguage);
+
     onProgress(100, 'Done');
-
-    // Create a context cache for the chat feature (best-effort; non-blocking)
-    const model = GEMINI_MODELS[analysisMode];
-    const chatCacheId = await createAnalysisCache(_cacheContext, model);
-    if (!chatCacheId) {
-      console.warn('Context cache unavailable; chat will use inline context fallback.');
-    }
-
-    return { executiveSummary, structuredSummary, behaviouralSummary, remarks, chatCacheId, _chatInlineContext: _cacheContext };
+    return { executiveSummary, structuredSummary, behaviouralSummary, remarks, chatCacheId };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     onError(message);

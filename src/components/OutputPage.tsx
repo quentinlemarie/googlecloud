@@ -231,6 +231,9 @@ export const OutputPage = React.memo(function OutputPage() {
           </Collapsible>
         </div>
 
+        {/* ── 4. Chat ────────────────────────────────────────────────── */}
+        <ChatBox />
+
         {/* Cloud Storage link */}
         {state.outputs.cloudStorageUrl && (
           <section className="text-sm text-gray-500">
@@ -245,10 +248,6 @@ export const OutputPage = React.memo(function OutputPage() {
             </a>
           </section>
         )}
-
-        {/* ── Ask about this meeting ──────────────────────────────────── */}
-        <ChatBox />
-
       </main>
 
       <SpeakerModal />

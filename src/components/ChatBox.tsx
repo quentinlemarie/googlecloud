@@ -1,134 +1,170 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { chatWithAnalysis } from '../lib/gemini';
-import { GEMINI_MODELS, BRAND_RED } from '../lib/constants';
+import { BRAND_RED } from '../lib/constants';
 import type { ChatMessage } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ChatBox
+// ChatBox – follow-up Q&A panel backed by the Gemini context cache so the
+// model continues from the same analysis without resending all tokens.
 // ─────────────────────────────────────────────────────────────────────────────
-export function ChatBox() {
-  const { state } = useTranscription();
-  const { chatCacheId, _chatInlineContext } = state.outputs;
-  const analysisMode = state.ui.analysisMode;
 
+export const ChatBox = React.memo(function ChatBox() {
+  const { state } = useTranscription();
+  const { executiveSummary, structuredSummary, behaviouralSummary, remarks, chatCacheId } = state.outputs;
+  const { speakers, transcript } = state.edited;
+  const outputLanguage = state.ui.outputLanguage;
+
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading) return;
+  // Focus input when chat is opened
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
 
-    const userMsg: ChatMessage = { role: 'user', text };
-    setMessages((prev) => [...prev, userMsg]);
+  const toggleOpen = useCallback(() => setOpen((v) => !v), []);
+
+  const handleSend = useCallback(async () => {
+    const trimmed = input.trim();
+    if (!trimmed || loading) return;
+
     setInput('');
+    setError(null);
+
+    const userMsg: ChatMessage = { role: 'user', text: trimmed };
+    setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
     try {
-      const model = GEMINI_MODELS[analysisMode];
+      // Prefer the cached context; fall back to inline context if unavailable
       const reply = await chatWithAnalysis(
-        text,
         messages,
-        model,
-        chatCacheId ?? null,
-        _chatInlineContext ?? null
+        trimmed,
+        chatCacheId,
+        chatCacheId ? undefined : {
+          transcript,
+          speakers,
+          executiveSummary,
+          structuredSummary,
+          behaviouralSummary,
+          remarks,
+          outputLanguage,
+        },
       );
-      setMessages((prev) => [...prev, { role: 'model', text: reply }]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'model', text: 'Sorry, something went wrong. Please try again.' },
-      ]);
+      const modelMsg: ChatMessage = { role: 'model', text: reply };
+      setMessages((prev) => [...prev, modelMsg]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, analysisMode, chatCacheId, _chatInlineContext]);
+  }, [
+    input, loading, messages, chatCacheId, transcript, speakers,
+    executiveSummary, structuredSummary, behaviouralSummary, remarks, outputLanguage,
+  ]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        void handleSend();
+        handleSend();
       }
     },
-    [handleSend]
+    [handleSend],
   );
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       {/* Header / toggle */}
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 py-2 text-left group"
+        onClick={toggleOpen}
+        className="w-full flex items-center justify-between gap-2 p-5 text-left group"
       >
-        <span className="text-lg font-bold group-hover:opacity-80 flex items-center gap-2" style={{ color: BRAND_RED }}>
-          <span>💬</span> Ask about this meeting
+        <span className="text-lg font-bold group-hover:opacity-80" style={{ color: BRAND_RED }}>
+          💬 Ask about this meeting
         </span>
         <span className="text-gray-400 text-sm flex-shrink-0">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
-        <div className="mt-2">
-          <p className="text-xs text-gray-400 mb-3">Chat with Gemini about the analysis.</p>
+        <div className="px-5 pb-5 space-y-3">
+          {/* Subtitle */}
+          <p className="text-xs text-gray-400">
+            {chatCacheId
+              ? 'Chat with Gemini — using the same analysis context (cached, no re-analysis).'
+              : 'Chat with Gemini about the analysis.'}
+          </p>
 
-          {/* Message history */}
-          <div className="min-h-[60px] max-h-72 overflow-y-auto space-y-2 mb-3 px-1">
+          {/* Messages */}
+          <div className="max-h-80 overflow-y-auto space-y-3 rounded-lg bg-gray-50 p-3" role="log" aria-live="polite">
             {messages.length === 0 && !loading && (
-              <p className="text-center text-gray-400 italic text-sm py-4">
+              <p className="text-sm text-gray-400 italic text-center py-4">
                 Ask a question about the meeting analysis…
               </p>
             )}
+
             {messages.map((msg, i) => (
               <div
                 key={i}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-xl px-4 py-2 text-sm whitespace-pre-wrap ${
+                  className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                     msg.role === 'user'
-                      ? 'text-white'
-                      : 'bg-gray-100 text-gray-800'
+                      ? 'bg-red-50 text-gray-800 border border-red-100'
+                      : 'bg-white text-gray-700 border border-gray-200'
                   }`}
-                  style={msg.role === 'user' ? { backgroundColor: BRAND_RED } : undefined}
                 >
                   {msg.text}
                 </div>
               </div>
             ))}
+
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 rounded-xl px-4 py-2 text-sm text-gray-500 italic">
+                <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 italic">
                   Thinking…
                 </div>
               </div>
             )}
-            <div ref={bottomRef} />
+
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Input row */}
+          {/* Error */}
+          {error && (
+            <p className="text-xs text-red-500">{error}</p>
+          )}
+
+          {/* Input area */}
           <div className="flex gap-2">
-            <input
-              type="text"
+            <textarea
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your question…"
+              aria-label="Chat message input"
+              rows={1}
+              className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
               disabled={loading}
-              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
-              style={{ borderColor: BRAND_RED }}
             />
             <button
-              onClick={() => void handleSend()}
-              disabled={!input.trim() || loading}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="flex-shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
               style={{ backgroundColor: BRAND_RED }}
             >
               Send
@@ -138,4 +174,4 @@ export function ChatBox() {
       )}
     </div>
   );
-}
+});
