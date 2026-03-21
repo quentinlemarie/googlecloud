@@ -12,7 +12,7 @@ import {
 } from './storage';
 import { requestAccessToken } from './auth';
 import { reportError } from './errorReporting';
-import { mimeToExtension } from '../utils/mimeUtils';
+import { mimeToExtension, extensionToMime } from '../utils/mimeUtils';
 
 export type ProgressCallback = (progress: number, message: string) => void;
 export type ErrorCallback = (message: string) => void;
@@ -82,9 +82,13 @@ export async function processAudioFile(
   try {
     onProgress(30, 'Reading audio file…');
     const audioBase64 = await fileToBase64(file);
+    // Determine MIME type: prefer what the browser reports, but fall back to
+    // extension-based inference so that files with an empty type (e.g. MP3 on
+    // some iOS/Android browsers) are handled correctly instead of defaulting to
+    // the wrong type (audio/webm).
+    const rawMimeType = file.type || extensionToMime(file.name);
     // Normalise iOS Voice Memo CAF MIME type – Gemini doesn't support audio/x-caf
     // but CAF files from iOS contain AAC audio, which Gemini accepts as audio/mp4.
-    const rawMimeType = file.type || 'audio/webm';
     const mimeType = rawMimeType === 'audio/x-caf' ? 'audio/mp4' : rawMimeType;
 
     const stopTicker = startProgressTicker(onProgress, 'Transcribing and identifying speakers…', 30, 90);

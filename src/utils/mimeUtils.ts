@@ -35,3 +35,34 @@ export function mimeToExtension(mimeType: string): string {
   const base = mimeType.split(';')[0];
   return MIME_TO_EXT[base] ?? base.split('/').pop()?.replace('x-', '') ?? 'bin';
 }
+
+/**
+ * Maps a file extension (with or without leading dot) to a MIME type.
+ * Falls back to 'application/octet-stream' for unrecognised extensions.
+ */
+const EXT_TO_MIME: Record<string, string> = {
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  webm: 'audio/webm',
+  opus: 'audio/opus',
+  wma: 'audio/x-ms-wma',
+  caf: 'audio/x-caf',
+  // Video
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska',
+  m4v: 'video/mp4',
+  ogv: 'video/ogg',
+  '3gp': 'video/3gpp',
+};
+
+export function extensionToMime(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  return EXT_TO_MIME[ext] ?? 'application/octet-stream';
+}
