@@ -64,6 +64,8 @@ export interface Outputs {
   cloudStorageUrl: string | null;
   /** Gemini context cache name for follow-up chat (e.g. `cachedContents/…`) */
   chatCacheId: string | null;
+  /** GCS object name of the auto-saved transcript report (for deletion) */
+  autoSavedObjectName: string | null;
 }
 
 export interface SpeakerRemark {

@@ -3,6 +3,7 @@ import { transcribeAudio, transcribeMultipleAudio, type AudioEntry } from './gem
 import { generateSummaryAndRemarks, createAnalysisCache } from './gemini';
 import {
   uploadToCloudStorage,
+  deleteFromCloudStorage,
   downloadDriveFile,
   openDrivePicker,
   openDriveFolderPicker,
@@ -13,6 +14,7 @@ import {
 import { requestAccessToken } from './auth';
 import { reportError } from './errorReporting';
 import { mimeToExtension } from '../utils/mimeUtils';
+import { TRANSCRIPT_BUCKET, TRANSCRIPT_PREFIX } from './constants';
 
 export type ProgressCallback = (progress: number, message: string) => void;
 export type ErrorCallback = (message: string) => void;
@@ -280,6 +282,88 @@ export async function saveToCloudStorage(
     onError(message);
     await reportError(err, 'saveToCloudStorage');
     return null;
+  }
+}
+
+/**
+ * Auto-saves the full report (except audio) to GCS under the Transcript/ prefix.
+ * Returns the GCS object name (for later deletion) and the public URL, or null on failure.
+ */
+export async function autoSaveReport(
+  transcript: TranscriptEntry[],
+  speakers: Speaker[],
+  executiveSummary: string,
+  structuredSummary: string,
+  behaviouralSummary: string,
+  remarks: { speakerName: string; remark: string }[],
+  onError: ErrorCallback,
+): Promise<{ objectName: string; url: string } | null> {
+  try {
+    const accessToken = await requestAccessToken();
+
+    // Build the linear transcript text
+    const speakerMap: Record<string, string> = {};
+    for (const s of speakers) {
+      speakerMap[s.id] = s.name || s.label;
+    }
+    const transcriptText = transcript
+      .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
+      .join('\n');
+
+    const remarksText = remarks
+      .map((r) => `- ${r.speakerName || 'Speaker'}: ${r.remark}`)
+      .join('\n');
+
+    const content = [
+      'EXECUTIVE SUMMARY',
+      '=================',
+      executiveSummary,
+      '',
+      'STRUCTURED SUMMARY',
+      '==================',
+      structuredSummary,
+      '',
+      'BEHAVIOURAL SUMMARY',
+      '===================',
+      behaviouralSummary,
+      '',
+      'INDIVIDUAL BEHAVIOURAL REMARKS',
+      '==============================',
+      remarksText,
+      '',
+      'TRANSCRIPT',
+      '==========',
+      transcriptText,
+    ].join('\n');
+
+    const summaryText = [executiveSummary, structuredSummary].join(' ');
+    const baseName = buildExportBaseName(speakers, transcript, summaryText);
+    const objectName = `${TRANSCRIPT_PREFIX}${baseName}.txt`;
+
+    const url = await uploadToCloudStorage(content, objectName, accessToken);
+    return { objectName, url };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    onError(message);
+    await reportError(err, 'autoSaveReport');
+    return null;
+  }
+}
+
+/**
+ * Deletes a previously auto-saved report from GCS.
+ */
+export async function deleteAutoSavedReport(
+  objectName: string,
+  onError: ErrorCallback,
+): Promise<void> {
+  try {
+    const accessToken = await requestAccessToken();
+    await deleteFromCloudStorage(objectName, TRANSCRIPT_BUCKET, accessToken);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    onError(message);
+    await reportError(err, 'deleteAutoSavedReport');
   }
 }
 
