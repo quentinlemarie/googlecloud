@@ -37,15 +37,7 @@ steps:
       - --platform
       - $_PLATFORM
       - --quiet
-        --build-arg VITE_GOOGLE_CLIENT_ID="371023911193-k424jji5aprp23hmhcbdhgvmoo0ngp70.apps.googleusercontent.com" \
-        --build-arg VITE_GOOGLE_APP_ID="371023911193" \
-        --build-arg VITE_GCP_PROJECT_ID="transcription-490414" \
-        --build-arg VITE_GOOGLE_API_KEY="$$VITE_GOOGLE_API_KEY" \
-        --build-arg VITE_GEMINI_API_KEY="$$VITE_GEMINI_API_KEY" \
-        --build-arg VITE_GCS_BUCKET="YOUR_BUCKET_NAME" \
-        --build-arg VITE_REC_FOLDER_ID="YOUR_FOLDER_ID" \
-        -t europe-west1-docker.pkg.dev/transcription-490414/cloud-run-source-deploy/mtpv2:$COMMIT_SHA \
-        .
+      
     secretEnv: ['VITE_GOOGLE_API_KEY', 'VITE_GEMINI_API_KEY']
 
 # This tells Cloud Build exactly where to find your secrets
@@ -55,3 +47,5 @@ availableSecrets:
       env: 'VITE_GOOGLE_API_KEY'
     - versionName: projects/transcription-490414/secrets/VITE_GEMINI_API_KEY/versions/latest
       env: 'VITE_GEMINI_API_KEY'
+options:
+  logging: CLOUD_LOGGING_ONLY
