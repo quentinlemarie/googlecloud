@@ -5,6 +5,39 @@ steps:
       - '-c'
       - |
         docker build \
+          --build-arg VITE_GOOGLE_CLIENT_ID=$_VITE_GOOGLE_CLIENT_ID \
+          --build-arg VITE_GOOGLE_APP_ID=$_VITE_GOOGLE_APP_ID \
+          --build-arg VITE_GCP_PROJECT_ID=$_VITE_GCP_PROJECT_ID \
+          --build-arg "VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY" \
+          --build-arg "VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY" \
+          --build-arg VITE_GCS_BUCKET=$_VITE_GCS_BUCKET \
+          --build-arg VITE_REC_FOLDER_ID=$_VITE_REC_FOLDER_ID \
+          -t $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA \
+          .
+    secretEnv:
+      - VITE_GOOGLE_API_KEY
+      - VITE_GEMINI_API_KEY
+
+  # Step 2: Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - gcloud
+      - run
+      - deploy
+      - $_SERVICE_NAME
+      - --image
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+      - --region
+      - $_DEPLOY_REGION
+      - --platform
+      - $_PLATFORM
+      - --quiet
         --build-arg VITE_GOOGLE_CLIENT_ID="371023911193-k424jji5aprp23hmhcbdhgvmoo0ngp70.apps.googleusercontent.com" \
         --build-arg VITE_GOOGLE_APP_ID="371023911193" \
         --build-arg VITE_GCP_PROJECT_ID="transcription-490414" \
