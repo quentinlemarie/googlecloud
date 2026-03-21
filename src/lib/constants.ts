@@ -10,18 +10,16 @@ export const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
 
 /**
  * Google Cloud Platform Browser API key.
- * Valid GCP API keys start with "AIza" and are 39 characters long.
- * If the raw value doesn't match this pattern it is treated as unconfigured
- * so the Drive Picker falls back to OAuth-only mode instead of erroring out.
+ * Required for the Google Drive Picker to function.
+ * Set VITE_GOOGLE_API_KEY in your .env file.
  */
-const _RAW_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
-export const API_KEY = /^AIza[0-9A-Za-z_-]{35}$/.test(_RAW_API_KEY) ? _RAW_API_KEY : '';
+export const API_KEY = (import.meta.env.VITE_GOOGLE_API_KEY || '').trim();
 
-if (_RAW_API_KEY && !API_KEY) {
+if (!API_KEY) {
   console.warn(
-    '[Smart Transcription] VITE_GOOGLE_API_KEY is set but does not look like a valid ' +
-    'Google Cloud Platform API key (expected format: AIza…, 39 chars). ' +
-    'The Drive Picker will fall back to OAuth-only mode.'
+    '[Smart Transcription] VITE_GOOGLE_API_KEY is not set. ' +
+    'The Google Drive Picker requires an API key and will fail without one. ' +
+    'Create a Browser API key in Google Cloud Console → APIs & Services → Credentials.'
   );
 }
 
