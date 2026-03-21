@@ -7,9 +7,14 @@ import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisM
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function callGemini(model: string, prompt: string, audioPart?: { inlineData: { mimeType: string; data: string } }): Promise<string> {
+type AudioPart = { inlineData: { mimeType: string; data: string } };
+
+async function callGemini(model: string, prompt: string, audioParts?: AudioPart | AudioPart[]): Promise<string> {
   const parts: unknown[] = [{ text: prompt }];
-  if (audioPart) parts.push(audioPart);
+  if (audioParts) {
+    const arr = Array.isArray(audioParts) ? audioParts : [audioParts];
+    for (const ap of arr) parts.push(ap);
+  }
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -142,22 +147,25 @@ function extractJSON(text: string): unknown {
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** A single audio clip described by its base64 data and MIME type. */
+export interface AudioEntry {
+  base64: string;
+  mimeType: string;
+}
+
 /**
- * Transcribes audio and identifies speakers using Gemini.
- * Audio may be provided as a base64-encoded string with mimeType,
- * or as a publicly accessible URL (pass url instead of base64).
+ * Build the transcription prompt and shared instruction block.
  */
-export async function transcribeAudio(
-  audioBase64: string,
-  mimeType: string,
-  outputLanguage: OutputLanguage = 'en',
-  analysisMode: AnalysisMode = 'deep'
-): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
-  const languageInstruction = outputLanguage === 'fr'
+function buildTranscriptionPrompt(languageCode: OutputLanguage, fileCount: number): string {
+  const languageInstruction = languageCode === 'fr'
     ? 'Write ALL output in French: transcribe spoken words in French, and write names, roles, and company names in French where applicable.'
     : 'Write ALL output text in English.';
 
-  const prompt = `
+  const multiFileNote = fileCount > 1
+    ? `\n- You are given ${fileCount} audio files that are parts of the SAME meeting recorded in sequence. Treat them as one continuous conversation. Maintain consistent speaker IDs across all files. Timestamps for each subsequent file should continue from where the previous file ended.`
+    : '';
+
+  return `
 You are a professional meeting transcription assistant.
 
 CRITICAL INSTRUCTIONS:
@@ -192,20 +200,15 @@ Rules:
 - Use empty strings for unknown names and companies (NEVER use "Unknown", "N/A", etc.)
 - For role: infer seniority and title from context even when not explicitly stated — consider authority level, how others address the speaker, topics they lead, self-introductions, and decision-making patterns; use empty string only if no inference is possible
 - Keep speaker IDs consistent throughout the transcript
-- Timestamps must be accurate to the audio
+- Timestamps must be accurate to the audio${multiFileNote}
 `.trim();
+}
 
-  const audioPart = {
-    inlineData: { mimeType, data: audioBase64 },
-  };
-
-  const model = GEMINI_MODELS[analysisMode];
-  const raw = await callGemini(model, prompt, audioPart);
+/** Parse Gemini transcription output and validate/clean the result. */
+function parseTranscriptionResult(raw: string): { speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] } {
   const parsed = extractJSON(raw);
-
   const result = validateAndCleanSpeakers(parsed);
 
-  // Validate & correct timestamps
   const timestampResult = validateSpeakerTimestamps(
     result.data.speakers,
     result.data.transcript
@@ -216,6 +219,41 @@ Rules:
     transcript: result.data.transcript,
     warnings: [...result.warnings, ...timestampResult.warnings],
   };
+}
+
+/**
+ * Transcribes a single audio file and identifies speakers using Gemini.
+ */
+export async function transcribeAudio(
+  audioBase64: string,
+  mimeType: string,
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
+): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
+  const prompt = buildTranscriptionPrompt(outputLanguage, 1);
+  const audioPart: AudioPart = { inlineData: { mimeType, data: audioBase64 } };
+  const model = GEMINI_MODELS[analysisMode];
+  const raw = await callGemini(model, prompt, audioPart);
+  return parseTranscriptionResult(raw);
+}
+
+/**
+ * Transcribes multiple audio files (collated parts of the same meeting)
+ * and identifies speakers using Gemini. All files are sent together so
+ * that speaker identification is consistent across all parts.
+ */
+export async function transcribeMultipleAudio(
+  entries: AudioEntry[],
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
+): Promise<{ speakers: Speaker[]; transcript: TranscriptEntry[]; warnings: string[] }> {
+  const prompt = buildTranscriptionPrompt(outputLanguage, entries.length);
+  const audioParts: AudioPart[] = entries.map((entry) => ({
+    inlineData: { mimeType: entry.mimeType, data: entry.base64 },
+  }));
+  const model = GEMINI_MODELS[analysisMode];
+  const raw = await callGemini(model, prompt, audioParts);
+  return parseTranscriptionResult(raw);
 }
 
 /**

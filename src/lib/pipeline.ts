@@ -1,5 +1,5 @@
 import type { TranscriptionState, Speaker, TranscriptEntry, OutputLanguage, AnalysisMode } from '../types';
-import { transcribeAudio } from './gemini';
+import { transcribeAudio, transcribeMultipleAudio, type AudioEntry } from './gemini';
 import { generateSummaryAndRemarks, createAnalysisCache } from './gemini';
 import {
   uploadToCloudStorage,
@@ -99,6 +99,59 @@ export async function processAudioFile(
       err instanceof Error ? err.message : 'Unknown error during processing';
     onError(message);
     await reportError(err, 'processAudioFile');
+    return null;
+  }
+}
+
+/**
+ * Processes multiple audio files as a single collated recording.
+ * Each file is converted to base64 and sent together to Gemini
+ * so that speaker identification is consistent across all parts.
+ */
+export async function processMultipleAudioFiles(
+  files: File[],
+  onProgress: ProgressCallback,
+  onError: ErrorCallback,
+  outputLanguage: OutputLanguage = 'en',
+  analysisMode: AnalysisMode = 'deep'
+): Promise<ProcessAudioResult | null> {
+  if (files.length === 0) return null;
+  if (files.length === 1) {
+    return processAudioFile(files[0], onProgress, onError, outputLanguage, analysisMode);
+  }
+
+  try {
+    onProgress(30, `Reading ${files.length} audio files…`);
+    const audioEntries: AudioEntry[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const base64 = await fileToBase64(file);
+      const mimeType = file.type || 'audio/webm';
+      audioEntries.push({ base64, mimeType });
+      onProgress(30 + Math.round((i + 1) / files.length * 10), `Read ${i + 1}/${files.length} files…`);
+    }
+
+    const stopTicker = startProgressTicker(onProgress, `Transcribing ${files.length} collated files…`, 40, 90);
+    const { speakers, transcript, warnings } = await transcribeMultipleAudio(audioEntries, outputLanguage, analysisMode);
+    stopTicker();
+
+    if (warnings.length > 0) {
+      console.warn('Transcription warnings:', warnings);
+    }
+
+    // Use the first file's base64/mimeType for audio playback in the review page
+    onProgress(95, 'Cleaning up…');
+    return {
+      speakers,
+      transcript,
+      audioBase64: audioEntries[0].base64,
+      mimeType: audioEntries[0].mimeType,
+    };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Unknown error during processing';
+    onError(message);
+    await reportError(err, 'processMultipleAudioFiles');
     return null;
   }
 }
