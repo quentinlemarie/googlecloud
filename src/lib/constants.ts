@@ -8,7 +8,22 @@ export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 // REQUIRED for Google Drive Picker
 export const GOOGLE_APP_ID = import.meta.env.VITE_GOOGLE_APP_ID || '';
 
-export const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
+/**
+ * Google Cloud Platform Browser API key.
+ * Valid GCP API keys start with "AIza" and are 39 characters long.
+ * If the raw value doesn't match this pattern it is treated as unconfigured
+ * so the Drive Picker falls back to OAuth-only mode instead of erroring out.
+ */
+const _RAW_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
+export const API_KEY = /^AIza[0-9A-Za-z_-]{35}$/.test(_RAW_API_KEY) ? _RAW_API_KEY : '';
+
+if (_RAW_API_KEY && !API_KEY) {
+  console.warn(
+    '[Smart Transcription] VITE_GOOGLE_API_KEY is set but does not look like a valid ' +
+    'Google Cloud Platform API key (expected format: AIza…, 39 chars). ' +
+    'The Drive Picker will fall back to OAuth-only mode.'
+  );
+}
 
 export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
@@ -27,6 +42,10 @@ export const GCS_BUCKET = import.meta.env.VITE_GCS_BUCKET || 'mtp-storage';
 // Bucket and prefix used for raw microphone recordings
 export const RECORDINGS_BUCKET = 'mtp-storage';
 export const RECORDINGS_PREFIX = 'Recordings/';
+
+// Bucket and prefix used for auto-saved transcript reports
+export const TRANSCRIPT_BUCKET = 'mtp-storage';
+export const TRANSCRIPT_PREFIX = 'Transcript/';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OAuth scopes
@@ -82,6 +101,11 @@ export const BRAND_RED = '#fe0101';
 // Debounce delays
 // ─────────────────────────────────────────────────────────────────────────────
 export const SPEAKER_EDIT_DEBOUNCE_MS = 800;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gemini context cache
+// ─────────────────────────────────────────────────────────────────────────────
+export const CHAT_CACHE_TTL_S = 1800; // 30 minutes
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Timestamp validation

@@ -7,11 +7,11 @@
 ///   index.html so the SPA can still boot offline.
 /// • **Google APIs** (accounts.google.com, apis.google.com) and the Gemini /
 ///   Cloud Storage endpoints are never cached – they always go to the network.
+/// • **Share target** – intercepts POST to /share-target, stashes the shared
+///   audio file in a dedicated cache, then redirects to the app's root.
 /// ─────────────────────────────────────────────────────────────────────────
 
 const CACHE_NAME = 'smart-transcription-v1';
-
-// Dedicated cache for files received via the Web Share Target API.
 const SHARE_CACHE = 'share-target-audio';
 
 const PRECACHE_URLS = [
@@ -34,7 +34,7 @@ self.addEventListener('install', (event) => {
 
 // ── Activate ─────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
-  // Remove old caches from previous versions, but keep the share-target cache.
+  // Remove old caches from previous versions (but keep the share cache).
   event.waitUntil(
     caches.keys().then((names) =>
       Promise.all(
@@ -48,39 +48,38 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ── Share Target (Web Share Target API) ──────────────────────────────────────
-// When the PWA receives a shared file (e.g. from iPhone Voice Memos), the OS
-// sends a POST to /share-target.  We stash the first audio/video file in a
-// dedicated cache so the app can pick it up on the next page load.
-
+// ── Fetch ────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // ── Handle incoming share-target POST ──────────────────────────────────
+  // ── Share-target handler ──────────────────────────────────────────────────
+  // When another app (e.g. Apple Voice Memos on iOS) shares an audio file to
+  // this PWA, the browser sends a POST to /share-target.  We intercept it,
+  // extract the file from the multipart form data, store it in a dedicated
+  // cache, and redirect to the app root so InputPage can pick it up.
   if (url.pathname === '/share-target' && request.method === 'POST') {
     event.respondWith(
       (async () => {
         try {
           const formData = await request.formData();
           const file = formData.get('audio');
-          if (file && file instanceof File && file.size > 0) {
-            // Store the shared file in a dedicated cache keyed by a fixed URL.
+          if (file && file instanceof File) {
             const cache = await caches.open(SHARE_CACHE);
+            // Store the file blob with its original name as a query param
+            const cacheUrl = new URL('/share-target-file', self.location.origin);
+            cacheUrl.searchParams.set('name', file.name);
             await cache.put(
-              '/shared-audio-file',
+              new Request(cacheUrl.href),
               new Response(file, {
-                headers: {
-                  'Content-Type': file.type || 'audio/mp4',
-                  'X-Shared-Filename': encodeURIComponent(file.name),
-                },
+                headers: { 'Content-Type': file.type || 'audio/mp4' },
               })
             );
           }
         } catch (err) {
           console.warn('Share target: failed to cache shared file', err);
         }
-        // Always redirect to the app root so the SPA boots normally.
+        // Redirect to the app root so the SPA boots and picks up the file.
         return Response.redirect('/', 303);
       })()
     );

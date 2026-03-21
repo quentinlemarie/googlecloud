@@ -4,16 +4,53 @@ import type { TokenResponse } from '../types/google.d.ts';
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// In-memory token cache
+// Token cache
 // ─────────────────────────────────────────────────────────────────────────────
-// Google access tokens are valid for ~3600 s. We cache the token in memory and
-// reuse it across calls so the user is only prompted once per session (or when
-// the token is about to expire). A 60-second safety margin ensures we never
-// hand out a token that will expire mid-request.
+// Google access tokens are valid for ~3600 s.  We cache the token both
+// in-memory AND in sessionStorage so the user is only prompted once per
+// browser session (or when the token actually expires).  A 60-second safety
+// margin ensures we never hand out a token that will expire mid-request.
 // ─────────────────────────────────────────────────────────────────────────────
+const SS_TOKEN_KEY = 'gauth_access_token';
+const SS_EXPIRY_KEY = 'gauth_token_expires_at';
+const TOKEN_EXPIRY_MARGIN_MS = 60_000; // refresh 60 s before actual expiry
+
 let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0; // epoch-ms
-const TOKEN_EXPIRY_MARGIN_MS = 60_000; // refresh 60 s before actual expiry
+
+/** Restore token from sessionStorage on module load (survives page refresh). */
+function _hydrateFromSession(): void {
+  try {
+    const token = sessionStorage.getItem(SS_TOKEN_KEY);
+    const expiry = sessionStorage.getItem(SS_EXPIRY_KEY);
+    if (token && expiry) {
+      const expiresAt = Number(expiry);
+      if (Date.now() < expiresAt - TOKEN_EXPIRY_MARGIN_MS) {
+        _cachedToken = token;
+        _tokenExpiresAt = expiresAt;
+      } else {
+        // Expired – clean up
+        sessionStorage.removeItem(SS_TOKEN_KEY);
+        sessionStorage.removeItem(SS_EXPIRY_KEY);
+      }
+    }
+  } catch {
+    // sessionStorage unavailable (e.g. incognito quota exceeded) – ignore
+  }
+}
+_hydrateFromSession();
+
+/** Persist the current token to sessionStorage. */
+function _persistToSession(): void {
+  try {
+    if (_cachedToken) {
+      sessionStorage.setItem(SS_TOKEN_KEY, _cachedToken);
+      sessionStorage.setItem(SS_EXPIRY_KEY, String(_tokenExpiresAt));
+    }
+  } catch {
+    // sessionStorage unavailable – cache stays in-memory only
+  }
+}
 
 /**
  * Ensures the Google Identity Services script is loaded.
@@ -72,7 +109,7 @@ function loadGoogleIdentityServices(): Promise<void> {
  * Returns a valid Google OAuth access token, reusing a cached token when
  * possible so the user is only prompted once per session.
  *
- * On the very first call the account-chooser popup is shown. Subsequent calls
+ * On the very first call the account-chooser popup is shown.  Subsequent calls
  * silently return the cached token until it expires (minus a safety margin),
  * at which point GIS is asked for a fresh token with `prompt: ''` so the
  * browser can renew silently using the existing grant.
@@ -81,6 +118,12 @@ function loadGoogleIdentityServices(): Promise<void> {
  * @throws  Error with user-friendly message on failure or popup block.
  */
 export async function requestAccessToken(): Promise<string> {
+  if (!CLIENT_ID) {
+    throw new Error(
+      'Google OAuth is not configured. Please set the VITE_GOOGLE_CLIENT_ID environment variable.'
+    );
+  }
+
   // Return cached token if it's still valid
   if (_cachedToken && Date.now() < _tokenExpiresAt - TOKEN_EXPIRY_MARGIN_MS) {
     return _cachedToken;
@@ -99,10 +142,16 @@ export async function requestAccessToken(): Promise<string> {
       return;
     }
 
-    // Build the client first so we can assign the callback synchronously
+    // Build the client first so we can assign the callback synchronously.
+    // ux_mode: 'popup' is required to prevent GIS from falling back to the
+    // redirect flow in environments where popups are restricted (e.g. some
+    // mobile browsers).  Without this the OAuth handshake uses a full-page
+    // redirect and Google returns "Error 400: redirect_uri_mismatch" because
+    // no redirect URI is registered for this app.
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
+      ux_mode: 'popup',
       // Placeholder – replaced immediately below before any request fires
       callback: () => {},
     });
@@ -127,6 +176,7 @@ export async function requestAccessToken(): Promise<string> {
       _cachedToken = response.access_token;
       const expiresInMs = (response.expires_in ?? 3600) * 1000;
       _tokenExpiresAt = Date.now() + expiresInMs;
+      _persistToSession();
 
       resolve(response.access_token);
     };
@@ -148,7 +198,7 @@ export async function requestAccessToken(): Promise<string> {
 
 /**
  * Returns the currently cached access token if it is still valid, or `null`
- * if no token is cached / the token has expired. Does NOT trigger a popup.
+ * if no token is cached / the token has expired.  Does NOT trigger a popup.
  */
 export function getAccessToken(): string | null {
   if (_cachedToken && Date.now() < _tokenExpiresAt - TOKEN_EXPIRY_MARGIN_MS) {
@@ -165,4 +215,10 @@ export function getAccessToken(): string | null {
 export function clearAccessToken(): void {
   _cachedToken = null;
   _tokenExpiresAt = 0;
+  try {
+    sessionStorage.removeItem(SS_TOKEN_KEY);
+    sessionStorage.removeItem(SS_EXPIRY_KEY);
+  } catch {
+    // sessionStorage unavailable – ignore
+  }
 }

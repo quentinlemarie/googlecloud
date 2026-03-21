@@ -1,10 +1,13 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useTranscription } from '../context/useTranscription';
 import { TranscriptViewer } from './TranscriptViewer';
 import { SpeakerGroup } from './SpeakerGroup';
 import { SpeakerModal } from './SpeakerModal';
 import { Header } from './Header';
+import { ChatBox } from './ChatBox';
+import { ConfirmDialog } from './ConfirmDialog';
 import { BRAND_RED } from '../lib/constants';
+import { autoSaveReport, deleteAutoSavedReport } from '../lib/pipeline';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reusable collapsible section wrapper
@@ -75,9 +78,50 @@ function MarkdownText({ text }: { text: string }) {
 // Main OutputPage
 // ─────────────────────────────────────────────────────────────────────────────
 export const OutputPage = React.memo(function OutputPage() {
-  const { state } = useTranscription();
-  const { executiveSummary, structuredSummary, behaviouralSummary, remarks } = state.outputs;
+  const { state, dispatch } = useTranscription();
+  const { executiveSummary, structuredSummary, behaviouralSummary, remarks, autoSavedObjectName } = state.outputs;
   const { speakers, transcript } = state.edited;
+
+  // ── Auto-save to GCS ───────────────────────────────────────────────────
+  const [showKeepDeleteDialog, setShowKeepDeleteDialog] = useState(false);
+  const autoSaveTriggered = useRef(false);
+
+  useEffect(() => {
+    // Only auto-save once per session, when outputs are available and no save has happened yet
+    if (autoSaveTriggered.current || autoSavedObjectName) return;
+    if (!executiveSummary && !structuredSummary) return;
+    autoSaveTriggered.current = true;
+
+    autoSaveReport(
+      transcript,
+      speakers,
+      executiveSummary,
+      structuredSummary,
+      behaviouralSummary,
+      remarks,
+      (msg) => dispatch({ type: 'SET_ERROR', message: `Auto-save failed: ${msg}` }),
+    ).then((result) => {
+      if (result) {
+        dispatch({ type: 'SET_AUTO_SAVE', objectName: result.objectName, url: result.url });
+        setShowKeepDeleteDialog(true);
+      }
+    });
+  }, [executiveSummary, structuredSummary, behaviouralSummary, remarks, transcript, speakers, autoSavedObjectName, dispatch]);
+
+  const handleKeep = useCallback(() => {
+    setShowKeepDeleteDialog(false);
+  }, []);
+
+  const handleDelete = useCallback(() => {
+    setShowKeepDeleteDialog(false);
+    if (autoSavedObjectName) {
+      deleteAutoSavedReport(
+        autoSavedObjectName,
+        (msg) => dispatch({ type: 'SET_ERROR', message: `Failed to delete report: ${msg}` }),
+      );
+      dispatch({ type: 'CLEAR_AUTO_SAVE' });
+    }
+  }, [autoSavedObjectName, dispatch]);
 
   // ── Section open/closed state ───────────────────────────────────────────
   // Parent sections
@@ -230,6 +274,9 @@ export const OutputPage = React.memo(function OutputPage() {
           </Collapsible>
         </div>
 
+        {/* ── 4. Chat ────────────────────────────────────────────────── */}
+        <ChatBox />
+
         {/* Cloud Storage link */}
         {state.outputs.cloudStorageUrl && (
           <section className="text-sm text-gray-500">
@@ -247,6 +294,17 @@ export const OutputPage = React.memo(function OutputPage() {
       </main>
 
       <SpeakerModal />
+
+      {/* Keep / delete auto-saved report dialog */}
+      {showKeepDeleteDialog && (
+        <ConfirmDialog
+          message="Report has been auto-saved to cloud storage. Would you like to keep it?"
+          confirmLabel="Keep"
+          cancelLabel="Delete"
+          onConfirm={handleKeep}
+          onCancel={handleDelete}
+        />
+      )}
     </>
   );
 });

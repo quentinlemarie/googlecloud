@@ -1,0 +1,27 @@
+# Dependencies – reinstalled inside the container
+node_modules/
+
+# Build output – rebuilt inside the container
+dist/
+
+# Environment files – secrets come from Cloud Build args / Secret Manager
+.env
+.env.local
+.env.*.local
+
+# Version control
+.git/
+.gitignore
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI / docs
+README.md

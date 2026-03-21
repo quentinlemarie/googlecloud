@@ -26,8 +26,10 @@ export type TranscriptionAction =
   | { type: 'UPDATE_TRANSCRIPT_ENTRY'; entry: TranscriptEntry }
   | { type: 'SET_SUMMARY'; summary: string }
   | { type: 'SET_REMARKS'; remarks: SpeakerRemark[] }
-  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[] }
+  | { type: 'SET_OUTPUTS'; executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; chatCacheId?: string | null }
   | { type: 'SET_CLOUD_STORAGE_URL'; url: string }
+  | { type: 'SET_AUTO_SAVE'; objectName: string; url: string }
+  | { type: 'CLEAR_AUTO_SAVE' }
   | { type: 'OPEN_SPEAKER_MODAL'; entryId: string }
   | { type: 'CLOSE_SPEAKER_MODAL' }
   | { type: 'SET_EXPORT_MENU_OPEN'; open: boolean }
@@ -63,6 +65,8 @@ const initialState: TranscriptionState = {
     behaviouralSummary: '',
     remarks: [],
     cloudStorageUrl: null,
+    chatCacheId: null,
+    autoSavedObjectName: null,
   },
   ui: {
     speakerModalOpen: false,
@@ -166,11 +170,32 @@ function reducer(state: TranscriptionState, action: TranscriptionAction): Transc
           structuredSummary: action.structuredSummary,
           behaviouralSummary: action.behaviouralSummary,
           remarks: action.remarks,
+          chatCacheId: action.chatCacheId ?? null,
         },
       };
 
     case 'SET_CLOUD_STORAGE_URL':
       return { ...state, outputs: { ...state.outputs, cloudStorageUrl: action.url } };
+
+    case 'SET_AUTO_SAVE':
+      return {
+        ...state,
+        outputs: {
+          ...state.outputs,
+          autoSavedObjectName: action.objectName,
+          cloudStorageUrl: action.url,
+        },
+      };
+
+    case 'CLEAR_AUTO_SAVE':
+      return {
+        ...state,
+        outputs: {
+          ...state.outputs,
+          autoSavedObjectName: null,
+          cloudStorageUrl: null,
+        },
+      };
 
     case 'OPEN_SPEAKER_MODAL':
       return {
