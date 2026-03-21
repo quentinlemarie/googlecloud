@@ -175,8 +175,6 @@ export async function openDrivePicker(accessToken: string): Promise<{ id: string
 
     if (REC_FOLDER_ID && REC_FOLDER_ID !== PLACEHOLDER_FOLDER_ID) {
       allFilesView.setParent(REC_FOLDER_ID);
-    } else {
-      allFilesView.setParent('root');
     }
 
     const pickerBuilder = new picker_ns.PickerBuilder()
