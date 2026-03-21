@@ -24,9 +24,9 @@ steps:
 
           --build-arg "VITE_REC_FOLDER_ID=$_VITE_REC_FOLDER_ID" \
 
-          --build-arg "VITE_GOOGLE_API_KEY=$VITE_GOOGLE_API_KEY" \
+          --build-arg "VITE_GOOGLE_API_KEY=$$VITE_GOOGLE_API_KEY" \
 
-          --build-arg "VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY" \
+          --build-arg "VITE_GEMINI_API_KEY=$$VITE_GEMINI_API_KEY" \
 
           -t $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA \
 
