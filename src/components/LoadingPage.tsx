@@ -36,9 +36,10 @@ export const LoadingPage = React.memo(function LoadingPage() {
       };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative">
+    <div className="min-h-screen bg-gray-50 flex flex-col p-6">
       {/* Logo – top-right, discreet */}
-      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+      <img src={logoSrc} alt="Smart Transcription logo" className="self-end h-8 opacity-70 shrink-0" />
+      <div className="flex-1 flex flex-col items-center justify-center">
       <div className="w-full max-w-md text-center">
         <h2 className="text-2xl font-bold mb-2" style={{ color: BRAND_RED }}>
           Processing…
@@ -93,6 +94,7 @@ export const LoadingPage = React.memo(function LoadingPage() {
             ↺ Restart from scratch
           </button>
         </div>
+      </div>
       </div>
 
       {confirmTarget === 'cancel' && (

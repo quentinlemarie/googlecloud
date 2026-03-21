@@ -274,14 +274,14 @@ export const InputPage = React.memo(function InputPage() {
 
   return (
     <div
-      className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative"
+      className="min-h-screen bg-gray-50 flex flex-col p-6 relative"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Logo – top-right, discreet */}
-      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+      <img src={logoSrc} alt="Smart Transcription logo" className="self-end h-8 opacity-70 shrink-0" />
 
       {/* Drop-zone overlay */}
       {isDragging && (
@@ -294,6 +294,7 @@ export const InputPage = React.memo(function InputPage() {
         </div>
       )}
 
+      <div className="flex-1 flex flex-col items-center justify-center w-full">
       <div className="w-full max-w-lg">
         {/* Logo / Title */}
         <div className="text-center mb-10">
@@ -430,6 +431,7 @@ export const InputPage = React.memo(function InputPage() {
             </div>
           </button>
         </div>
+      </div>
       </div>
 
       {showRecordings && (
