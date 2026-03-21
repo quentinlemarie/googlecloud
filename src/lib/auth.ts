@@ -6,7 +6,7 @@ const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 // ─────────────────────────────────────────────────────────────────────────────
 // Token cache
 // ─────────────────────────────────────────────────────────────────────────────
-// Google access tokens are valid for ~3 600 s.  We cache the token both
+// Google access tokens are valid for ~3600 s.  We cache the token both
 // in-memory AND in sessionStorage so the user is only prompted once per
 // browser session (or when the token actually expires).  A 60-second safety
 // margin ensures we never hand out a token that will expire mid-request.
