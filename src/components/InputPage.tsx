@@ -6,6 +6,7 @@ import type { OutputLanguage, Speaker, TranscriptEntry, AnalysisMode } from '../
 import { requestAccessToken } from '../lib/auth';
 import { uploadRecordingBlob } from '../lib/storage';
 import { ConfirmDialog } from './ConfirmDialog';
+import { RecordingsLibrary } from './RecordingsLibrary';
 import { useAudioLevel, SILENCE_THRESHOLD } from '../hooks/useAudioLevel';
 import { AudioLevelIndicator } from './AudioLevelIndicator';
 import logoSrc from '../assets/Logo.svg';
@@ -45,6 +46,7 @@ export const InputPage = React.memo(function InputPage() {
   const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
+  const [showRecordings, setShowRecordings] = useState(false);
 
   // Live audio-level (0 – 1) for the visual indicator
   const audioLevel = useAudioLevel(micStream);
@@ -194,6 +196,15 @@ export const InputPage = React.memo(function InputPage() {
       await processUploadedFile(file);
     },
     [processUploadedFile, onError]
+  );
+
+  // ── Recordings Library ────────────────────────────────────────────────────
+  const handleUseRecording = useCallback(
+    async (file: File) => {
+      setShowRecordings(false);
+      await processUploadedFile(file);
+    },
+    [processUploadedFile]
   );
 
   // ── Microphone ────────────────────────────────────────────────────────────
@@ -406,8 +417,27 @@ export const InputPage = React.memo(function InputPage() {
           <p className="text-center text-xs text-gray-400 pt-2">
             or drag &amp; drop an audio or video file anywhere on this page
           </p>
+
+          {/* My Recordings */}
+          <button
+            onClick={() => setShowRecordings(true)}
+            className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <span className="text-3xl">📼</span>
+            <div className="text-left">
+              <div className="font-semibold text-gray-800">My Recordings</div>
+              <div className="text-sm text-gray-500">Browse, download or reuse a past recording</div>
+            </div>
+          </button>
         </div>
       </div>
+
+      {showRecordings && (
+        <RecordingsLibrary
+          onClose={() => setShowRecordings(false)}
+          onUse={handleUseRecording}
+        />
+      )}
 
       {confirmTarget === 'cancel' && (
         <ConfirmDialog
