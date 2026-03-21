@@ -6,6 +6,7 @@ import type { OutputLanguage, Speaker, TranscriptEntry, AnalysisMode } from '../
 import { requestAccessToken } from '../lib/auth';
 import { uploadRecordingBlob } from '../lib/storage';
 import { ConfirmDialog } from './ConfirmDialog';
+import { RecordingsLibrary } from './RecordingsLibrary';
 import { useAudioLevel, SILENCE_THRESHOLD } from '../hooks/useAudioLevel';
 import { AudioLevelIndicator } from './AudioLevelIndicator';
 import logoSrc from '../assets/Logo.svg';
@@ -45,6 +46,7 @@ export const InputPage = React.memo(function InputPage() {
   const [confirmTarget, setConfirmTarget] = useState<'cancel' | 'restart' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
+  const [showRecordings, setShowRecordings] = useState(false);
 
   // Live audio-level (0 – 1) for the visual indicator
   const audioLevel = useAudioLevel(micStream);
@@ -196,6 +198,15 @@ export const InputPage = React.memo(function InputPage() {
     [processUploadedFile, onError]
   );
 
+  // ── Recordings Library ────────────────────────────────────────────────────
+  const handleUseRecording = useCallback(
+    async (file: File) => {
+      setShowRecordings(false);
+      await processUploadedFile(file);
+    },
+    [processUploadedFile]
+  );
+
   // ── Microphone ────────────────────────────────────────────────────────────
   const handleMicStart = useCallback(async () => {
     try {
@@ -263,14 +274,14 @@ export const InputPage = React.memo(function InputPage() {
 
   return (
     <div
-      className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 relative"
+      className="min-h-screen bg-gray-50 flex flex-col p-6 relative"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Logo – top-right, discreet */}
-      <img src={logoSrc} alt="Smart Transcription logo" className="absolute top-4 right-4 h-8 opacity-70" />
+      <img src={logoSrc} alt="Smart Transcription logo" className="self-end h-8 opacity-70 shrink-0" />
 
       {/* Drop-zone overlay */}
       {isDragging && (
@@ -283,6 +294,7 @@ export const InputPage = React.memo(function InputPage() {
         </div>
       )}
 
+      <div className="flex-1 flex flex-col items-center justify-center w-full">
       <div className="w-full max-w-lg">
         {/* Logo / Title */}
         <div className="text-center mb-10">
@@ -406,8 +418,28 @@ export const InputPage = React.memo(function InputPage() {
           <p className="text-center text-xs text-gray-400 pt-2">
             or drag &amp; drop an audio or video file anywhere on this page
           </p>
+
+          {/* My Recordings */}
+          <button
+            onClick={() => setShowRecordings(true)}
+            className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <span className="text-3xl">📼</span>
+            <div className="text-left">
+              <div className="font-semibold text-gray-800">My Recordings</div>
+              <div className="text-sm text-gray-500">Browse, download or reuse a past recording</div>
+            </div>
+          </button>
         </div>
       </div>
+      </div>
+
+      {showRecordings && (
+        <RecordingsLibrary
+          onClose={() => setShowRecordings(false)}
+          onUse={handleUseRecording}
+        />
+      )}
 
       {confirmTarget === 'cancel' && (
         <ConfirmDialog

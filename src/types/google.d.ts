@@ -58,8 +58,7 @@ export interface GoogleNamespace {
       initTokenClient: (config: {
         client_id: string;
         scope: string;
-        // CRITICAL FIX: ux_mode must be included so TypeScript allows the popup fix!
-        ux_mode?: 'popup' | 'redirect'; 
+        ux_mode?: 'popup' | 'redirect';
         callback?: (response: TokenResponse) => void;
         error_callback?: (error: unknown) => void;
       }) => TokenClient;

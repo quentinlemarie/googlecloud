@@ -23,6 +23,3 @@ availableSecrets:
       env: 'VITE_GOOGLE_API_KEY'
     - versionName: projects/transcription-490414/secrets/VITE_GEMINI_API_KEY/versions/latest
       env: 'VITE_GEMINI_API_KEY'
-
-options:
-  logging: CLOUD_LOGGING_ONLY

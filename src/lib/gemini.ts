@@ -1,7 +1,7 @@
-import { GEMINI_API_KEY, GEMINI_MODELS } from './constants';
+import { GEMINI_API_KEY, GEMINI_MODELS, CHAT_CACHE_TTL_S } from './constants';
 import { validateAndCleanSpeakers, validateSummaryResponse } from './validation';
 import { validateSpeakerTimestamps } from './audioProcessing';
-import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode } from '../types';
+import type { Speaker, TranscriptEntry, SpeakerRemark, OutputLanguage, AnalysisMode, ChatMessage } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -220,13 +220,22 @@ Rules:
 
 /**
  * Generates a meeting summary and per-speaker behavioural remarks.
+ * Also returns the prompt and raw model response so a context cache can be
+ * created for follow-up chat without resending tokens.
  */
 export async function generateSummaryAndRemarks(
   transcript: TranscriptEntry[],
   speakers: Speaker[],
   outputLanguage: OutputLanguage = 'en',
   analysisMode: AnalysisMode = 'deep'
-): Promise<{ executiveSummary: string; structuredSummary: string; behaviouralSummary: string; remarks: SpeakerRemark[]; warnings: string[] }> {
+): Promise<{
+  executiveSummary: string;
+  structuredSummary: string;
+  behaviouralSummary: string;
+  remarks: SpeakerRemark[];
+  warnings: string[];
+  _cacheContext: { prompt: string; rawResponse: string };
+}> {
   const speakerMap = Object.fromEntries(speakers.map((s) => [s.id, s.name || s.label]));
   const formattedTranscript = transcript
     .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
@@ -281,5 +290,171 @@ Return ONLY a JSON object (no markdown code fences, no explanation):
     behaviouralSummary: result.data.behaviouralSummary,
     remarks,
     warnings: result.warnings,
+    _cacheContext: { prompt, rawResponse: raw },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context cache – keeps the analysis conversation server-side so follow-up
+// chat messages don't resend the full transcript / summaries.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a Gemini context cache containing the original analysis
+ * conversation (prompt + model response). Returns the cache resource name
+ * (`cachedContents/…`) or `null` if caching is unavailable.
+ */
+export async function createAnalysisCache(
+  cacheContext: { prompt: string; rawResponse: string },
+  outputLanguage: OutputLanguage = 'en',
+): Promise<string | null> {
+  const languageInstruction = outputLanguage === 'fr'
+    ? 'Respond in French.'
+    : 'Respond in English.';
+
+  const model = GEMINI_MODELS.deep;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: `models/${model}`,
+          displayName: 'Meeting analysis context',
+          systemInstruction: {
+            parts: [{
+              text: `You are the same expert meeting analyst who just produced the analysis in this conversation. Answer the user's follow-up questions based on the transcript and your own analysis. Stay consistent with your previous findings. Do not hallucinate information not present in the transcript or analysis. ${languageInstruction}`,
+            }],
+          },
+          contents: [
+            { role: 'user', parts: [{ text: cacheContext.prompt }] },
+            { role: 'model', parts: [{ text: cacheContext.rawResponse }] },
+          ],
+          ttl: `${CHAT_CACHE_TTL_S}s`,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      console.warn('Context cache creation failed:', response.status, await response.text());
+      return null;
+    }
+
+    const data = (await response.json()) as { name?: string };
+    return data.name ?? null;
+  } catch (err) {
+    console.warn('Context cache creation error:', err);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat with analysis context (cache-backed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sends a follow-up chat message using the cached analysis context.
+ * When a cache is available the request only contains the new conversation
+ * turns — the original transcript + analysis lives server-side in the cache.
+ *
+ * Falls back to inline context when no cache ID is available.
+ */
+export async function chatWithAnalysis(
+  history: ChatMessage[],
+  userMessage: string,
+  cacheId: string | null,
+  fallbackContext?: {
+    transcript: TranscriptEntry[];
+    speakers: Speaker[];
+    executiveSummary: string;
+    structuredSummary: string;
+    behaviouralSummary: string;
+    remarks: SpeakerRemark[];
+    outputLanguage: OutputLanguage;
+  },
+): Promise<string> {
+  const contents: { role: string; parts: { text: string }[] }[] = [];
+  for (const msg of history) {
+    contents.push({ role: msg.role, parts: [{ text: msg.text }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+  const model = GEMINI_MODELS.deep;
+
+  // ── Cache-backed path (preferred) ────────────────────────────────────────
+  if (cacheId) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cachedContent: cacheId, contents }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+    }
+
+    const data = (await response.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  }
+
+  // ── Inline fallback (no cache) ───────────────────────────────────────────
+  if (!fallbackContext) throw new Error('No analysis context available for chat');
+
+  const speakerMap = Object.fromEntries(
+    fallbackContext.speakers.map((s) => [s.id, s.name || s.label]),
+  );
+  const formattedTranscript = fallbackContext.transcript
+    .map((e) => `[${speakerMap[e.speakerId] ?? e.speakerId}]: ${e.text}`)
+    .join('\n');
+  const formattedRemarks = fallbackContext.remarks
+    .map((r) => `- ${r.speakerName || speakerMap[r.speakerId] || r.speakerId}: ${r.remark}`)
+    .join('\n');
+  const lang = fallbackContext.outputLanguage === 'fr' ? 'Respond in French.' : 'Respond in English.';
+
+  const systemText = `You are the same expert meeting analyst who produced the analysis below. Answer the user's follow-up questions. Stay consistent with your previous findings. Do not hallucinate. ${lang}
+
+=== TRANSCRIPT ===
+${formattedTranscript}
+
+=== EXECUTIVE SUMMARY ===
+${fallbackContext.executiveSummary}
+
+=== STRUCTURED SUMMARY ===
+${fallbackContext.structuredSummary}
+
+=== BEHAVIOURAL SUMMARY ===
+${fallbackContext.behaviouralSummary}
+
+=== INDIVIDUAL REMARKS ===
+${formattedRemarks}`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
