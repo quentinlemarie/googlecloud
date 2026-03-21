@@ -381,7 +381,7 @@ export const InputPage = React.memo(function InputPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/*,video/*,audio/x-m4a,audio/x-caf,.m4a,.caf"
+            accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.wma,.caf,.mp4,.mov,.avi,.mkv,.m4v,.webm"
             className="hidden"
             onChange={handleFileChange}
           />
