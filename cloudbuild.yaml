@@ -1,4 +1,5 @@
 steps:
+  # Step 1: Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args:
@@ -37,10 +38,7 @@ steps:
       - --platform
       - $_PLATFORM
       - --quiet
-      
-    secretEnv: ['VITE_GOOGLE_API_KEY', 'VITE_GEMINI_API_KEY']
 
-# This tells Cloud Build exactly where to find your secrets
 availableSecrets:
   secretManager:
     - versionName: projects/transcription-490414/secrets/VITE_GOOGLE_API_KEY/versions/latest
